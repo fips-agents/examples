@@ -147,9 +147,9 @@ Key methods on `BaseAgent`:
 ```sh
 make build                          # Build container (podman, linux/amd64)
 podman push $IMAGE quay.io/...      # Push to registry
-make deploy PROJECT=my-namespace    # Deploy via Helm
-make redeploy PROJECT=my-namespace  # Force-redeploy (fresh image pull)
-make clean PROJECT=my-namespace     # Remove from OpenShift
+make deploy PROJECT=calculus-agent    # Deploy via Helm
+make redeploy PROJECT=calculus-agent  # Force-redeploy (fresh image pull)
+make clean PROJECT=calculus-agent     # Remove from OpenShift
 ```
 
 `make redeploy` forces OpenShift to pull the latest image and restart pods —

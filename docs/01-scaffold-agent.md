@@ -93,7 +93,7 @@ entry can use HTTP or stdio transport:
 
 ```yaml
 mcp_servers:
-  - url: http://calculus-mcp:8080/mcp    # HTTP
+  - url: http://mcp-server:8080/mcp/      # HTTP
   - command: /path/to/server             # stdio
     args: [--verbose]
 ```

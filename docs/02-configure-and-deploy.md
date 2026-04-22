@@ -83,7 +83,7 @@ most often:
 
 **`image.repository` and `image.tag`** -- where Kubernetes pulls the container
 image from. When using the OpenShift internal registry, this is the image
-stream path (e.g. `image-registry.openshift-image-registry.svc:5000/my-namespace/calculus-agent`).
+stream path (e.g. `image-registry.openshift-image-registry.svc:5000/calculus-agent/calculus-agent`).
 
 **`config.*`** -- every key under `config:` becomes an environment variable in
 the ConfigMap. These are substituted into `agent.yaml` at runtime. For example,
@@ -109,15 +109,15 @@ regardless of your laptop's architecture.
 
 ```bash
 # Create a binary BuildConfig that accepts source uploads
-oc new-build --binary --name=calculus-agent --strategy=docker -n my-namespace
+oc new-build --binary --name=calculus-agent --strategy=docker -n calculus-agent
 
 # Tell it to use Containerfile instead of Dockerfile
 oc patch bc/calculus-agent --type=json \
   -p '[{"op":"replace","path":"/spec/strategy/dockerStrategy/dockerfilePath","value":"Containerfile"}]' \
-  -n my-namespace
+  -n calculus-agent
 
 # Upload your source and start the build
-oc start-build calculus-agent --from-dir=. --follow -n my-namespace
+oc start-build calculus-agent --from-dir=. --follow -n calculus-agent
 ```
 
 !!! info "What is a BuildConfig?"
@@ -149,11 +149,24 @@ podman push calculus-agent:v1 quay.io/your-org/calculus-agent:v1
 
 ## Deploy with Helm
 
+!!! info "Deploy mechanisms in this tutorial"
+    Different components use different deploy mechanisms:
+
+    - **Agent** (this module): `helm install` / `helm upgrade` via the chart in
+      `chart/`. The chart produces a Deployment, Service, ConfigMap, and Route.
+    - **MCP server** (Module 3): `./deploy.sh <namespace>`, which applies
+      `openshift.yaml` (BuildConfig + Deployment + Service + Route).
+    - **Gateway and UI** (Module 5): `./deploy.sh <namespace>` for the initial
+      deploy, plus `helm upgrade` when configuration changes.
+
+    The `Makefile` wraps these: `make deploy PROJECT=<namespace>` calls the
+    right tool for each project type.
+
 With the image built, deploy the agent:
 
 ```bash
 # Get the internal registry path for the image we just built
-IMAGE=$(oc get is calculus-agent -n my-namespace -o jsonpath='{.status.dockerImageRepository}')
+IMAGE=$(oc get is calculus-agent -n calculus-agent -o jsonpath='{.status.dockerImageRepository}')
 
 # Deploy the chart
 helm install calculus-agent chart/ \
@@ -164,7 +177,7 @@ helm install calculus-agent chart/ \
   --set config.MODEL_NAME=/mnt/models \
   --set config.OPENAI_API_KEY=not-required \
   --set route.enabled=true \
-  -n my-namespace
+  -n calculus-agent
 ```
 
 Here is what each `--set` does:
@@ -195,13 +208,13 @@ Run through these checks to confirm everything is working.
 
 ```bash
 # 1. Check pod status — you want Running with 1/1 ready
-oc get pods -n my-namespace -l app.kubernetes.io/instance=calculus-agent
+oc get pods -n calculus-agent -l app.kubernetes.io/instance=calculus-agent
 
 # 2. Watch logs for startup messages
-oc logs deployment/calculus-agent -n my-namespace --tail=15
+oc logs deployment/calculus-agent -n calculus-agent --tail=15
 
 # 3. Get the external route URL
-ROUTE=$(oc get route calculus-agent -n my-namespace -o jsonpath='{.spec.host}')
+ROUTE=$(oc get route calculus-agent -n calculus-agent -o jsonpath='{.spec.host}')
 
 # 4. Health check
 curl -sk "https://$ROUTE/healthz"
@@ -223,12 +236,12 @@ If step 6 returns a JSON response with the model's answer, your agent is live.
 These are the most common issues and how to fix them.
 
 **ImagePullBackOff** -- Kubernetes cannot pull the container image. The image
-repository path is usually wrong. Run `oc get is -n my-namespace` to find
+repository path is usually wrong. Run `oc get is -n calculus-agent` to find
 the correct internal registry path, then `helm upgrade` with the corrected
 `image.repository` value.
 
 **CrashLoopBackOff** -- the container starts and immediately crashes. Check
-logs with `oc logs deployment/calculus-agent -n my-namespace`. Common causes:
+logs with `oc logs deployment/calculus-agent -n calculus-agent`. Common causes:
 a missing Python dependency, a syntax error in `agent.yaml`, or a
 `PermissionError` on source files (see the warning below).
 
@@ -240,7 +253,7 @@ a missing Python dependency, a syntax error in `agent.yaml`, or a
     permission fix is still in place.
 
 **Route returns 503** -- the pod is not ready yet. Wait for the rollout to
-finish: `oc rollout status deployment/calculus-agent -n my-namespace`. If the
+finish: `oc rollout status deployment/calculus-agent -n calculus-agent`. If the
 rollout is stuck, check pod logs.
 
 **Model returns errors** -- if the health check passes but chat completions
@@ -248,13 +261,13 @@ fail, the issue is usually the model endpoint. Verify the endpoint is reachable
 from inside the cluster:
 
 ```bash
-oc exec deployment/calculus-agent -n my-namespace -- \
+oc exec deployment/calculus-agent -n calculus-agent -- \
   curl -s http://vllm-predictor.model-ns.svc.cluster.local/v1/models
 ```
 
 **Old image after rebuild** -- OpenShift caches images. After building a new
 version, restart the deployment to pick it up:
-`oc rollout restart deployment/calculus-agent -n my-namespace`.
+`oc rollout restart deployment/calculus-agent -n calculus-agent`.
 
 ## Redeploying after changes
 
@@ -263,19 +276,19 @@ restart the deployment. Here is the sequence:
 
 ```bash
 # 1. Rebuild the image in the cluster
-oc start-build calculus-agent --from-dir=. --follow -n my-namespace
+oc start-build calculus-agent --from-dir=. --follow -n calculus-agent
 
 # 2. Restart the deployment to pick up the new image
-oc rollout restart deployment/calculus-agent -n my-namespace
+oc rollout restart deployment/calculus-agent -n calculus-agent
 
 # 3. Wait for the new pod to become ready
-oc rollout status deployment/calculus-agent -n my-namespace
+oc rollout status deployment/calculus-agent -n calculus-agent
 ```
 
 The Makefile provides a shortcut that wraps these steps:
 
 ```bash
-make redeploy PROJECT=my-namespace
+make redeploy PROJECT=calculus-agent
 ```
 
 !!! tip "Updating configuration without rebuilding"
@@ -288,7 +301,7 @@ make redeploy PROJECT=my-namespace
     helm upgrade calculus-agent chart/ \
       --set config.MODEL_ENDPOINT=http://new-endpoint.svc.cluster.local/v1 \
       --reuse-values \
-      -n my-namespace
+      -n calculus-agent
     ```
 
 ## What's next

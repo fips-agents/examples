@@ -20,8 +20,8 @@
 # Production env vars:
 #   AGENT_NAME -- override the agent name per deployment
 agent:
-  name: ${AGENT_NAME:-my-agent}
-  description: "A brief description of what this agent does"
+  name: ${AGENT_NAME:-calculus-agent}
+  description: "A math tutor agent that solves calculus problems step by step"
   version: 0.1.0
 
 # -- LLM provider and generation settings ------------------------------------
@@ -68,7 +68,7 @@ model:
 # mcp_servers:
 #   - url: ${MCP_SEARCH_URL:-http://search-mcp:8080/mcp}
 mcp_servers:
-  - url: ${MCP_CALCULUS_URL:-http://calculus-mcp:8080/mcp/}
+  - url: ${MCP_CALCULUS_URL:-http://mcp-server.calculus-mcp.svc.cluster.local:8080/mcp/}
 
 # -- Local tools ---------------------------------------------------------------
 #
@@ -214,7 +214,7 @@ nodes: {}
 #   sandbox:
 #     enabled: true
 #     image:
-#       repository: quay.io/yourorg/code-sandbox
+#       repository: code-sandbox
 #       tag: latest
 #
 # The tool reads SANDBOX_URL from the environment (set automatically by the
