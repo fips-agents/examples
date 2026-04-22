@@ -267,21 +267,40 @@ URL="http://localhost:8000/mcp/"
 URL="https://$(oc get route mcp-server -n calculus-mcp -o jsonpath='{.spec.host}')/mcp/"
 ```
 
-Then issue the three standard calls (add `-sk` for self-signed TLS certs):
+The streamable-http transport requires two headers on every request:
+`Content-Type: application/json` and `Accept: application/json,
+text/event-stream`. After `initialize`, subsequent requests must also include
+the `Mcp-Session-Id` returned in the response headers. Add `-sk` for
+self-signed TLS certs.
 
 ```bash
-# 1. Initialize
-curl -s "$URL" -H "Content-Type: application/json" \
+# 1. Initialize -- dump headers so we can capture the session ID
+curl -s "$URL" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -D /tmp/mcp-headers.txt \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
 
+# Capture session ID from response headers
+SESSION=$(grep -i mcp-session-id /tmp/mcp-headers.txt | tr -d '\r' | awk '{print $2}')
+
 # 2. List tools
-curl -s "$URL" -H "Content-Type: application/json" \
+curl -s "$URL" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Mcp-Session-Id: $SESSION" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 
 # 3. Call a tool
-curl -s "$URL" -H "Content-Type: application/json" \
+curl -s "$URL" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Mcp-Session-Id: $SESSION" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"integrate","arguments":{"expression":"x**2","variable":"x"}}}'
 ```
+
+Responses arrive as SSE events, prefixed with `event: message\ndata: ...`.
+The JSON payload follows on the `data:` line.
 
 For deployed servers, `mcp-test-mcp` wraps the handshake into one-line
 commands:

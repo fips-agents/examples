@@ -15,19 +15,21 @@ Browser  ──▶  UI  ──▶  Gateway  ──▶  Agent  ──▶  MCP Ser
   (chat)    (Route)    (Route)      (Service)     (Service)
 ```
 
-Each component is its own Deployment, Service, and Route. The UI is static
-assets served behind a route. The gateway is a Go binary that proxies requests
-to the agent. The agent and MCP server are what you built in Modules 1--4.
+Each component is its own Deployment, Service, and Route. The UI is a Go server
+that serves static assets and proxies API calls to the gateway. The gateway is a
+Go binary that proxies requests to the agent. The agent and MCP server are what
+you built in Modules 1--4.
 
 Two environment variables control the wiring:
 
 | Variable | Set on | Points to |
 |----------|--------|-----------|
 | `BACKEND_URL` | Gateway | Agent's in-cluster Service URL |
-| `API_URL` | UI | Gateway's external Route URL |
+| `API_URL` | UI | Gateway's in-cluster Service URL |
 
-The gateway uses an internal service URL because it runs inside the cluster. The
-UI uses the external route because it runs in the user's browser.
+Both use internal service URLs because both the gateway and UI server run inside
+the cluster. The UI server acts as a reverse proxy -- the browser never calls the
+gateway directly.
 
 ## Scaffold the gateway
 
@@ -37,57 +39,66 @@ cd calculus-gateway && ls
 ```
 
 ```
-Containerfile   Makefile        chart/          deploy.sh
-go.mod          go.sum          main.go         redeploy.sh
+build/          CLAUDE.md       Containerfile   Makefile
+README.md       chart/          cmd/            go.mod
+internal/       planning/
 ```
 
-The gateway is a minimal Go project. No framework, no generated code -- just
-the standard library's `net/http` and `httputil` packages.
+The gateway is a structured Go project using only the standard library. The
+handlers live in `internal/handler/`, configuration in `internal/config/`, and
+the server entrypoint in `cmd/server/main.go`.
 
 ### The proxy handler
 
-The entire gateway fits in `main.go`. Here's the core:
+The interesting piece is the `ChatHandler` in `internal/handler/chat.go`, which
+proxies `/v1/chat/completions` requests to the agent:
 
 ```go
-package main
+// internal/handler/chat.go -- proxies /v1/chat/completions to the agent
+package handler
 
 import (
-	"log"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
-	"os"
+    "bytes"
+    "io"
+    "net/http"
+
+    "github.com/fips-agents/calculus-gateway/internal/proxy"
 )
 
-func main() {
-	backend := os.Getenv("BACKEND_URL")
-	if backend == "" {
-		log.Fatal("BACKEND_URL is required")
-	}
+type ChatHandler struct {
+    BackendURL string
+    Client     *http.Client
+}
 
-	target, err := url.Parse(backend)
-	if err != nil {
-		log.Fatalf("invalid BACKEND_URL: %v", err)
-	}
+func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    body, _ := io.ReadAll(r.Body)
+    defer r.Body.Close()
 
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"status":"ok"}`))
-	})
-	http.Handle("/", proxy)
+    // Forward to backend
+    req, _ := http.NewRequest(http.MethodPost, h.BackendURL+"/v1/chat/completions", bytes.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    resp, err := h.Client.Do(req)
+    if err != nil {
+        http.Error(w, `{"error":"backend request failed"}`, http.StatusBadGateway)
+        return
+    }
+    defer resp.Body.Close()
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	log.Printf("gateway listening on :%s, proxying to %s", port, backend)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+    // Relay response (supports both sync JSON and SSE streaming)
+    for k, v := range resp.Header {
+        w.Header()[k] = v
+    }
+    w.WriteHeader(resp.StatusCode)
+    io.Copy(w, resp.Body)
 }
 ```
 
-That's it. `httputil.NewSingleHostReverseProxy` does the heavy lifting --
-it copies headers, streams request and response bodies, and handles hop-by-hop
-headers correctly.
+The full implementation in the scaffold handles streaming and sync modes
+separately, with proper SSE relay for streaming responses (see
+`internal/proxy/sse.go`). The code shown here is a simplified view of the
+forwarding logic. The scaffold also includes health and readiness handlers
+(`/healthz`, `/readyz`), request logging middleware, and configuration loaded
+from environment variables.
 
 ### Why not just expose the agent directly?
 
@@ -121,36 +132,51 @@ cd calculus-ui && ls
 ```
 
 ```
-Containerfile   Makefile        chart/          deploy.sh
-nginx.conf      public/         redeploy.sh     src/
+CLAUDE.md       Containerfile   Makefile        README.md
+chart/          cmd/            go.mod          planning/
+static/
 ```
 
-The UI is a web application that provides a chat interface. It connects to the
-gateway's `/v1/chat/completions` endpoint and streams responses back to the
-user. The key configuration is `API_URL`, which tells the frontend where the
-gateway lives.
+The UI is a Go server that does two things: it serves the chat interface as
+embedded static assets, and it acts as a reverse proxy for API calls to the
+gateway.
 
-!!! info "UI framework"
-    The scaffolded UI uses a lightweight frontend stack. The important detail
-    for this tutorial isn't the framework -- it's the deployment pattern. The
-    UI is built into a container that serves static assets via nginx, with
-    `API_URL` injected at container startup.
+!!! info "UI architecture"
+    The scaffolded UI is a Go server that embeds static assets (HTML, JS, CSS)
+    and acts as a reverse proxy for API calls. The browser talks only to the UI
+    server -- no cross-origin requests needed. The chat interface includes SSE
+    streaming, tool call visualization, and KaTeX math rendering.
 
-### How API_URL is injected
+The `static/` directory contains the frontend: `index.html`, `app.js`, and
+`style.css`. These are embedded into the Go binary at build time using
+`static/embed.go`.
 
-The UI needs to know the gateway's public URL at runtime, not build time (since
-the URL differs per environment). The Containerfile uses an entrypoint script
-that substitutes `API_URL` into the built assets before nginx starts:
+### How the reverse proxy works
 
-```bash
-#!/bin/sh
-# entrypoint.sh -- runs at container startup (Linux containers only)
-find /opt/app-root/src -name '*.js' \
-  -exec sed -i "s|__API_URL__|${API_URL}|g" {} \;
-exec nginx -g 'daemon off;'
+Instead of injecting the gateway URL into the frontend JavaScript, the UI server
+proxies API requests itself. The browser makes all calls to the same origin --
+the UI route -- and the Go server forwards `/v1/` requests to the gateway:
+
+```go
+// From cmd/server/main.go -- the key proxy setup
+proxy := &httputil.ReverseProxy{
+    Director: func(r *http.Request) {
+        r.URL.Scheme = backendURL.Scheme
+        r.URL.Host = backendURL.Host
+        r.Host = backendURL.Host
+    },
+    FlushInterval: -1, // flush immediately for SSE streaming
+}
+
+mux.Handle("/v1/", proxy)          // API calls proxied to backend
+mux.Handle("/", http.FileServer(http.FS(static.Files()))) // static assets
 ```
 
-This pattern avoids rebuilding the container for each environment.
+The browser calls `/v1/chat/completions` on the same origin as the UI. The Go
+server proxies these requests to the backend. This avoids CORS issues entirely --
+no cross-origin requests, no preflight checks. `API_URL` is set on the server
+via an environment variable (typically through the Helm chart's ConfigMap), not
+injected into the frontend JavaScript.
 
 ## Deploy the gateway
 
@@ -158,18 +184,20 @@ Build and deploy the gateway to your namespace:
 
 ```bash
 cd calculus-gateway
-./deploy.sh calculus-agent
+make build-openshift PROJECT=calculus-agent
+make deploy PROJECT=calculus-agent
 ```
 
-The deploy script creates the BuildConfig, builds the image, and deploys the
-Helm chart. You need to set `BACKEND_URL` to the agent's in-cluster service
-URL:
+`make build-openshift` creates a BuildConfig (if one doesn't already exist),
+uploads the source, and builds the image in the cluster. `make deploy` runs
+`helm upgrade --install` with the chart. You need to set `BACKEND_URL` to the
+agent's in-cluster service URL:
 
 ```bash
 helm upgrade calculus-gateway chart/ \
   --set config.BACKEND_URL=http://calculus-agent:8080 \
   --reuse-values \
-  -n calculus-agent
+  -n calculus-agent --kube-context=fips-rhoai
 ```
 
 !!! note "In-cluster service DNS"
@@ -182,7 +210,7 @@ helm upgrade calculus-gateway chart/ \
 Verify the gateway is proxying correctly:
 
 ```bash
-GW_ROUTE=$(oc get route calculus-gateway -n calculus-agent -o jsonpath='{.spec.host}')
+GW_ROUTE=$(oc get route calculus-gateway -n calculus-agent --context=fips-rhoai -o jsonpath='{.spec.host}')
 
 # Health check (gateway's own endpoint)
 curl -sk "https://$GW_ROUTE/healthz"
@@ -198,29 +226,43 @@ gateway pod --> agent service --> agent pod.
 
 ## Deploy the UI
 
+The UI scaffold doesn't include a `build-openshift` Makefile target, so you
+create the BuildConfig directly and build from source:
+
 ```bash
 cd calculus-ui
-./deploy.sh calculus-agent
+oc new-build --binary --name=calculus-ui --strategy=docker \
+  -n calculus-agent --context=fips-rhoai
+oc patch bc/calculus-ui --patch '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"Containerfile"}}}}' \
+  -n calculus-agent --context=fips-rhoai
+oc start-build calculus-ui --from-dir=. --follow \
+  -n calculus-agent --context=fips-rhoai
 ```
 
-Then set `API_URL` to the gateway's external route:
+Once the image is built, deploy the Helm chart and point `API_URL` at the
+gateway's **in-cluster** service URL:
 
 ```bash
-helm upgrade calculus-ui chart/ \
-  --set config.API_URL=https://$GW_ROUTE \
-  --reuse-values \
-  -n calculus-agent
+IMAGE=$(oc get is calculus-ui -n calculus-agent --context=fips-rhoai \
+  -o jsonpath='{.status.dockerImageRepository}')
+
+helm upgrade --install calculus-ui chart/ \
+  --set image.repository=$IMAGE \
+  --set image.tag=latest \
+  --set config.API_URL=http://calculus-gateway:8080 \
+  -n calculus-agent --kube-context=fips-rhoai
 ```
 
-!!! warning "HTTPS, not HTTP"
-    `API_URL` must use `https://` because OpenShift routes terminate TLS at the
-    edge. If you use `http://`, the browser will block the request as mixed
-    content.
+!!! info "In-cluster URL, not external route"
+    `API_URL` points to the gateway's **in-cluster** service URL because the
+    UI server proxies API requests server-side. The browser never calls the
+    gateway directly -- it sends requests to the UI origin, and the Go server
+    forwards them.
 
 Get the UI route and open it in your browser:
 
 ```bash
-UI_ROUTE=$(oc get route calculus-ui -n calculus-agent -o jsonpath='{.spec.host}')
+UI_ROUTE=$(oc get route calculus-ui -n calculus-agent --context=fips-rhoai -o jsonpath='{.spec.host}')
 echo "https://$UI_ROUTE"
 ```
 
@@ -234,12 +276,12 @@ at the edge. You need to raise it on both the gateway and UI routes.
 # Set 120-second timeout on the gateway route
 oc annotate route calculus-gateway \
   haproxy.router.openshift.io/timeout=120s \
-  --overwrite -n calculus-agent
+  --overwrite -n calculus-agent --context=fips-rhoai
 
 # Set 120-second timeout on the UI route
 oc annotate route calculus-ui \
   haproxy.router.openshift.io/timeout=120s \
-  --overwrite -n calculus-agent
+  --overwrite -n calculus-agent --context=fips-rhoai
 ```
 
 !!! warning "The silent 504"
@@ -259,14 +301,15 @@ You: What is the integral of sin(x)*cos(x)?
 
 Here's what happens:
 
-1. The **UI** sends a POST to the gateway's `/v1/chat/completions` endpoint.
-2. The **gateway** proxies the request to the agent's in-cluster service.
-3. The **agent** calls `call_model()`, which sends the conversation to the LLM.
-4. The **LLM** decides to call the `integrate` tool.
-5. The **agent** dispatches the tool call over MCP to the calculus-helper server.
-6. The **MCP server** runs SymPy and returns the result.
-7. The **agent** feeds the result back to the LLM, which formats the answer.
-8. The response streams back through the gateway to the UI.
+1. The **browser** sends a POST to the UI's `/v1/chat/completions` (same origin).
+2. The **UI server** proxies the request to the gateway's in-cluster service.
+3. The **gateway** proxies the request to the agent's in-cluster service.
+4. The **agent** calls `call_model()`, which sends the conversation to the LLM.
+5. The **LLM** decides to call the `integrate` tool.
+6. The **agent** dispatches the tool call over MCP to the calculus-helper server.
+7. The **MCP server** runs SymPy and returns the result.
+8. The **agent** feeds the result back to the LLM, which formats the answer.
+9. The response streams back through the gateway and UI server to the browser.
 
 The answer should show something like: **sin(x)^2 / 2 + C**.
 
@@ -280,21 +323,26 @@ If any request hangs or times out, check the route timeout annotation first.
 Then check pod logs for each component in the chain:
 
 ```bash
-oc logs deployment/calculus-ui -n calculus-agent --tail=20
-oc logs deployment/calculus-gateway -n calculus-agent --tail=20
-oc logs deployment/calculus-agent -n calculus-agent --tail=20
+oc logs deployment/calculus-ui -n calculus-agent --context=fips-rhoai --tail=20
+oc logs deployment/calculus-gateway -n calculus-agent --context=fips-rhoai --tail=20
+oc logs deployment/calculus-agent -n calculus-agent --context=fips-rhoai --tail=20
 ```
 
 ## Redeploying after changes
 
-Each component follows the same rebuild cycle from Module 2:
+Each component follows a build-then-deploy cycle:
 
 ```bash
 # Gateway
-cd calculus-gateway && make redeploy PROJECT=calculus-agent
+cd calculus-gateway
+make build-openshift PROJECT=calculus-agent
+make deploy PROJECT=calculus-agent
 
 # UI
-cd calculus-ui && make redeploy PROJECT=calculus-agent
+cd calculus-ui
+oc start-build calculus-ui --from-dir=. --follow \
+  -n calculus-agent --context=fips-rhoai
+make deploy PROJECT=calculus-agent
 ```
 
 You can redeploy any component independently. The gateway doesn't need to
@@ -312,9 +360,9 @@ which automatically routes to the new pod after a rollout.
 The three-tier architecture you've built (UI -- gateway -- agents) is a
 common pattern in production agent systems. Here's why each layer exists:
 
-**UI layer.** Handles presentation, session state, and user preferences. It
-can be replaced (a mobile app, a CLI, a Slack bot) without touching anything
-behind the gateway.
+**UI layer.** Handles presentation, session state, user preferences, and
+proxies API calls to the gateway. It can be replaced (a mobile app, a CLI, a
+Slack bot) without touching anything behind the gateway.
 
 **Gateway layer.** The single point of entry for all clients. It owns
 cross-cutting concerns: authentication, authorization, rate limiting, request

@@ -21,10 +21,11 @@ cd calculus-agent && ls
 ```
 
 ```
-AGENTS.md       Containerfile   Makefile        agent.yaml
-chart/          deploy.sh       evals/          prompts/
-pyproject.toml  redeploy.sh     rules/          skills/
-src/            tests/          tools/
+AGENTS.md       CLAUDE.md       Containerfile   Makefile
+README.md       agent.yaml      chart/          deploy.sh
+evals/          prompts/        pyproject.toml  redeploy.sh
+rules/          skills/         src/            tests/
+tools/
 ```
 
 ## Project structure
@@ -246,6 +247,8 @@ def format_citations(urls: list, titles: list) -> str:
     # ... implementation ...
 ```
 
+Because `format_citations` uses `visibility="agent_only"`, it is only callable from your Python code via `self.use_tool()`. It does not appear in the LLM's tool schema and is not included in the `/v1/agent-info` tool list.
+
 Key conventions:
 
 - One file per tool in `tools/`. Files starting with `_` are skipped.
@@ -287,10 +290,16 @@ curl localhost:8080/v1/agent-info | python -m json.tool
 
 ```json
 {
-    "name": "my-agent",
-    "version": "0.1.0",
-    "description": "A brief description of what this agent does",
-    "tools": ["web_search", "code_executor", "format_citations"]
+    "agent": {
+        "name": "my-agent",
+        "description": "A brief description of what this agent does",
+        "version": "0.1.0"
+    },
+    "model": {
+        "endpoint": "...",
+        "name": "..."
+    },
+    "tools": ["code_executor", "web_search"]
 }
 ```
 

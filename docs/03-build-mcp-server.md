@@ -54,6 +54,27 @@ The entry point (`src/main.py`) is minimal -- it calls `create_server()` then
 environment variables. Locally you use STDIO; the Containerfile sets
 `MCP_TRANSPORT=http` for OpenShift.
 
+## Prepare the project
+
+### Remove scaffold examples
+
+The scaffold includes example tools and tests to show the expected structure.
+Remove them to start fresh:
+
+```bash
+./remove_examples.sh
+```
+
+### Add the sympy dependency
+
+The calculus tools use SymPy for symbolic math. Add it to the project's
+dependencies:
+
+```bash
+echo "sympy>=1.13" >> requirements.txt
+make install
+```
+
 ## Build the shared parsing layer
 
 Before writing tools, create `src/calc.py` -- a shared module for expression
@@ -284,21 +305,45 @@ HTTP transport environment for port 8080.
 ## Test the MCP protocol with curl
 
 Once deployed, test the server using streamable-http -- standard POSTs with
-JSON-RPC payloads.
+JSON-RPC payloads. The streamable-http transport requires two headers on every
+request: `Content-Type: application/json` and `Accept: application/json,
+text/event-stream`. After `initialize`, subsequent requests must also include
+the `Mcp-Session-Id` returned in the response headers.
 
 ```bash
 ROUTE=$(oc get route mcp-server -n calculus-mcp -o jsonpath='{.spec.host}')
 
-# Initialize
-curl -sk "https://$ROUTE/mcp/" -H "Content-Type: application/json" \
+# Initialize -- dump response headers so we can extract the session ID
+curl -sk "https://$ROUTE/mcp/" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -D /tmp/mcp-headers.txt \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
+```
 
+The response headers include an `Mcp-Session-Id` that you'll need for
+subsequent requests. Capture it:
+
+```bash
+SESSION=$(grep -i mcp-session-id /tmp/mcp-headers.txt | tr -d '\r' | awk '{print $2}')
+```
+
+Responses arrive as SSE events, prefixed with `event: message\ndata: ...`.
+Most terminals display the JSON payload inline.
+
+```bash
 # List tools
-curl -sk "https://$ROUTE/mcp/" -H "Content-Type: application/json" \
+curl -sk "https://$ROUTE/mcp/" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Mcp-Session-Id: $SESSION" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 
 # Call integrate
-curl -sk "https://$ROUTE/mcp/" -H "Content-Type: application/json" \
+curl -sk "https://$ROUTE/mcp/" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Mcp-Session-Id: $SESSION" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"integrate","arguments":{"expression":"x**2","variable":"x"}}}'
 ```
 

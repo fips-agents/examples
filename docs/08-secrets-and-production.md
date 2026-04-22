@@ -256,6 +256,13 @@ spec:
 Apply it with `oc apply -f hpa.yaml -n calculus-agent`. The same pattern works
 for the MCP server -- create a separate HPA targeting its Deployment.
 
+!!! warning "Apply HPA after your final Helm upgrade"
+    The HPA takes ownership of `.spec.replicas` once applied. Any subsequent
+    `helm upgrade` will conflict with the HPA over the replica count. Apply
+    the HPA as the last step, after all Helm configuration is finalized. If
+    you need to run `helm upgrade` later, delete the HPA first, upgrade, then
+    re-apply.
+
 !!! tip "Why min 2 replicas?"
     A single replica means any pod restart causes downtime. Two replicas
     ensure one pod is always available during rolling updates and restarts.
@@ -303,13 +310,13 @@ exceed this, especially with large context windows. If you haven't already set
 this in Module 5, annotate the agent's Route:
 
 ```bash
-oc annotate route calculus-agent \
+oc annotate route calculus-gateway \
   haproxy.router.openshift.io/timeout=120s \
   -n calculus-agent --overwrite
 ```
 
-Do the same for the gateway Route. The UI Route typically doesn't need a
-longer timeout since it serves static assets.
+Do the same for the agent Route if it is also directly exposed. The UI Route
+typically doesn't need a longer timeout since it serves static assets.
 
 ## What's next
 
