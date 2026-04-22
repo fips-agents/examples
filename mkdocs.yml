@@ -38,8 +38,9 @@ nav:
     - "3. Build an MCP Server": 03-build-mcp-server.md
     - "4. Wire MCP to Agent": 04-wire-mcp-to-agent.md
     - "5. Gateway and UI": 05-gateway-and-ui.md
-    - "6. Extend with AI": 06-extend-with-ai.md
-    - "7. Production Hardening": 07-secrets-and-production.md
+    - "6. Code Execution Sandbox": 06-code-sandbox.md
+    - "7. Extend with AI": 07-extend-with-ai.md
+    - "8. Production Hardening": 08-secrets-and-production.md
   - Reference:
     - "agent.yaml": reference/agent-yaml.md
     - "Helm Chart": reference/helm-chart.md
