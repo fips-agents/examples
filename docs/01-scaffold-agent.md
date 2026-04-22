@@ -1,0 +1,310 @@
+# 1. Scaffold Your Agent
+
+We start by creating an agent project using the `fips-agents` CLI. By the end
+of this module, you'll understand every file in the project and have the agent
+running locally.
+
+## Create the project
+
+The `fips-agents create agent` command scaffolds a complete project from the
+built-in template. The `--local` flag sets it up for local development.
+
+```bash
+fips-agents create agent calculus-agent --local
+```
+
+The CLI scaffolds the full project and prints next steps. Once it finishes,
+look at what was created:
+
+```bash
+cd calculus-agent && ls
+```
+
+```
+AGENTS.md       Containerfile   Makefile        agent.yaml
+chart/          deploy.sh       evals/          prompts/
+pyproject.toml  redeploy.sh     rules/          skills/
+src/            tests/          tools/
+```
+
+## Project structure
+
+| Path | Purpose |
+|------|---------|
+| `src/agent.py` | Your agent subclass -- most of your work happens here |
+| `agent.yaml` | Configuration: model endpoint, tools, prompts, server settings |
+| `prompts/system.md` | System prompt with YAML frontmatter and Markdown body |
+| `tools/` | Local tool implementations, one `@tool`-decorated file per tool |
+| `skills/` | Progressive-disclosure capabilities (agentskills.io spec) |
+| `rules/` | Behavioral constraints, one Markdown file per rule |
+| `chart/` | Helm chart for deploying to OpenShift |
+| `evals/` | Test scenarios and eval runner |
+| `Containerfile` | Multi-stage build using Red Hat UBI base images |
+| `Makefile` | Development and deployment commands |
+| `AGENTS.md` | Open standard agent descriptor |
+| `pyproject.toml` | Python package metadata and dependencies |
+
+## Understanding agent.yaml
+
+This is the central configuration file. It has clearly labeled sections -- here
+are the key ones.
+
+### Agent identity
+
+```yaml
+agent:
+  name: ${AGENT_NAME:-my-agent}
+  description: "A brief description of what this agent does"
+  version: 0.1.0
+```
+
+The name and description appear in logs and on the `/v1/agent-info` endpoint.
+We'll change these to match our calculus agent in Module 2.
+
+### Model configuration
+
+```yaml
+model:
+  endpoint: ${MODEL_ENDPOINT:-http://llamastack:8321/v1}
+  name: ${MODEL_NAME:-meta-llama/Llama-3.3-70B-Instruct}
+  temperature: 0.7
+  max_tokens: 4096
+```
+
+This points at any OpenAI-compatible API -- vLLM, LlamaStack, llm-d, or even
+OpenAI itself.
+
+!!! tip "Environment variable substitution"
+    `${MODEL_ENDPOINT:-http://llamastack:8321/v1}` means: use the
+    `MODEL_ENDPOINT` env var if set, otherwise fall back to
+    `http://llamastack:8321/v1`. This pattern appears throughout
+    `agent.yaml`. It lets a single config file work unchanged across local
+    development, staging, and production -- you only override what differs
+    via ConfigMaps or Secrets in OpenShift.
+
+### MCP servers
+
+```yaml
+mcp_servers: []
+```
+
+Empty by default. In Module 4, we'll add our calculus MCP server here. Each
+entry can use HTTP or stdio transport:
+
+```yaml
+mcp_servers:
+  - url: http://calculus-mcp:8080/mcp    # HTTP
+  - command: /path/to/server             # stdio
+    args: [--verbose]
+```
+
+### Local tools and server
+
+```yaml
+tools:
+  local_dir: ./tools
+  visibility_default: agent_only
+
+server:
+  host: ${HOST:-0.0.0.0}
+  port: ${PORT:-8080}
+```
+
+Tools are auto-discovered from `tools/` at startup. The `visibility_default`
+controls which tool plane a tool belongs to if it doesn't declare one
+explicitly (more on planes below). The server section configures the HTTP
+binding -- the agent exposes an OpenAI-compatible `/v1/chat/completions`
+endpoint that the gateway and UI communicate through.
+
+## Understanding src/agent.py
+
+The template gives you a `ResearchAssistant` that demonstrates all three
+model-calling patterns (`call_model`, `call_model_json`,
+`call_model_validated`). Here's the essential shape:
+
+```python
+from fipsagents.baseagent import BaseAgent, StepResult
+
+class ResearchAssistant(BaseAgent):
+    async def step(self) -> StepResult:
+        response = await self.call_model()
+        response = await self.run_tool_calls(response)
+        return StepResult.done(result=response.content)
+```
+
+Three things to notice:
+
+**BaseAgent subclass.** Your agent inherits from `BaseAgent`, which handles
+configuration, tool registration, MCP connections, prompt loading, and
+lifecycle management. You implement `step()`.
+
+**The `step()` method.** Called in a loop -- each invocation is one turn of
+reasoning. `call_model()` sends the conversation to the LLM with all
+registered tool schemas. `run_tool_calls()` executes any tool calls the LLM
+requested and re-calls the model until no more tool calls remain.
+
+**The `__main__` block.** Starts the agent as an HTTP server:
+
+```python
+if __name__ == "__main__":
+    from fipsagents.baseagent import load_config
+    from fipsagents.server import OpenAIChatServer
+
+    config = load_config("agent.yaml")
+    server = OpenAIChatServer(
+        agent_class=ResearchAssistant,
+        config_path="agent.yaml",
+        title=config.agent.name,
+        version=config.agent.version,
+    )
+    server.run(host=config.server.host, port=config.server.port)
+```
+
+Each incoming request creates a fresh agent instance, runs
+`setup()` then the `step()` loop then `shutdown()`, and streams the response.
+The server also provides `/healthz` for liveness probes and `/v1/agent-info`
+for metadata.
+
+## Understanding prompts/system.md
+
+The system prompt uses **Markdown with YAML frontmatter**:
+
+```markdown
+---
+name: system
+description: System prompt for the Research Assistant agent
+temperature: 0.3
+variables:
+  - name: max_results
+    type: integer
+    description: Maximum number of search results to consider
+    default: "5"
+---
+
+You are a Research Assistant. Your job is to answer questions thoroughly
+and accurately by searching for information and synthesizing what you find.
+
+## Instructions
+
+1. When given a research question, use the `web_search` tool to find
+   relevant information...
+```
+
+The frontmatter declares metadata and template variables. Variables use
+`{variable_name}` syntax and are substituted when loaded.
+
+The `prompts.system` field in `agent.yaml` designates which prompt file
+becomes the system prompt (defaults to `system`, which loads
+`prompts/system.md`). At startup, `build_system_prompt()` loads this file,
+appends all rules from `rules/`, and appends the skill manifest from
+`skills/`.
+
+## The tool system
+
+The framework uses a **two-plane** model for tools:
+
+| Plane | Visibility | Who calls it | Example |
+|-------|-----------|-------------|---------|
+| Plane 1 | `agent_only` | Your Python code via `self.use_tool()` | Formatting, validation, internal logic |
+| Plane 2 | `llm_only` | The LLM via tool-calling protocol | Web search, code execution, MCP tools |
+
+There's also `both` for tools callable from either side, but it's rare.
+
+The template includes examples of each. Here's the plane 2 tool
+(`tools/web_search.py`):
+
+```python
+from fipsagents.baseagent.tools import tool
+
+@tool(
+    description="Search the web for information on a topic",
+    visibility="llm_only",
+)
+async def web_search(query: str) -> str:
+    """Search the web and return relevant results.
+
+    Args:
+        query: The search query string.
+    """
+    # ... implementation ...
+```
+
+And the plane 1 tool (`tools/format_citations.py`):
+
+```python
+@tool(
+    description="Format raw URLs and titles into clean citation strings",
+    visibility="agent_only",
+)
+def format_citations(urls: list, titles: list) -> str:
+    """Format URLs and titles into numbered citation lines.
+
+    Args:
+        urls: List of source URLs.
+        titles: List of source titles (same length as urls).
+    """
+    # ... implementation ...
+```
+
+Key conventions:
+
+- One file per tool in `tools/`. Files starting with `_` are skipped.
+- Type hints are mandatory -- the registry builds JSON schemas from them.
+- Google-style `Args:` docstrings become per-parameter descriptions.
+- Use `async def` for I/O. Sync functions run in a thread executor.
+
+!!! note "MCP tools are always plane 2"
+    Tools discovered from MCP servers are automatically registered with
+    `llm_only` visibility, regardless of the `visibility_default` setting.
+    The LLM decides when to call them, just like local plane 2 tools.
+
+## Run it locally
+
+Install dependencies and start the agent:
+
+```bash
+make install
+make run-local
+```
+
+`make install` creates a virtual environment in `.venv/` and installs
+`fipsagents` plus your project's dependencies. `make run-local` starts the
+HTTP server on port 8080.
+
+Once you see `Uvicorn running on http://0.0.0.0:8080`, test it:
+
+```bash
+curl localhost:8080/healthz
+```
+
+```json
+{"status": "ok"}
+```
+
+```bash
+curl localhost:8080/v1/agent-info | python -m json.tool
+```
+
+```json
+{
+    "name": "my-agent",
+    "version": "0.1.0",
+    "description": "A brief description of what this agent does",
+    "tools": ["web_search", "code_executor", "format_citations"]
+}
+```
+
+!!! warning "The mock tools"
+    The template ships with a `web_search` tool that returns fake results and
+    a `code_executor` that requires a sandbox sidecar (not running locally by
+    default). This is intentional -- it lets you verify the agent starts and
+    responds without external dependencies. We'll replace these with real
+    calculus tools in Modules 3 and 4.
+
+Stop the server with `Ctrl+C`.
+
+## What's next
+
+The scaffolded project runs, but it's still the generic Research Assistant with
+mock tools. In [Module 2](02-configure-and-deploy.md), you'll customize the
+configuration, point it at a real LLM on your OpenShift cluster, and deploy it.

@@ -1,0 +1,94 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.so
+.build/
+.eggs/
+*.egg-info/
+*.egg
+.venv/
+.uv/
+.env
+.env.*
+.envrc
+
+fastmcp-server-docs/
+
+# Editors/OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+.history/
+
+# Byte-compiled / cache
+*.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logs
+*.log
+
+# Node (if present)
+node_modules/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Local artifacts
+uv.lock
+uv.lock.*
+*.lock
+
+# OpenShift/Build
+.oc-build/*
+.openshift/*
+# kube creds or local kube config copies
+kubeconfig*
+*.kubeconfig
+
+# Secrets patterns (do not commit)
+secrets*/
+secret*/
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+*.keystore
+*.der
+*.pkcs12
+
+# Prompt previews/outputs
+*.preview.txt
+
+# Container
+*.tar
+
+# Ignore generated files in tests
+/tmp/
+
+# Claude Code local state.  The commands/ subdirectory is kept in the repo
+# because it documents the slash-command workflow used to build this demo;
+# everything else under .claude/ is ephemeral per-session state.
+.claude/*
+!.claude/commands/
+!.claude/commands/**
+
+# The two 2026-04-06 retros carried over from the upstream template's own
+# development history -- not relevant to this demo repo.  New retros for
+# THIS project go under retrospectives/ and are committed normally.
+retrospectives/2026-04-06_*/
+
+# Backup files some editors leave behind
+*.bak
+*.orig
+*~
+
+# Local Claude Code / MemoryHub tooling config
+.memoryhub.yaml

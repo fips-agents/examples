@@ -1,0 +1,69 @@
+site_name: "Building AI Agents for OpenShift"
+site_description: "A hands-on tutorial for building, deploying, and extending AI agents using the fips-agents framework"
+site_url: https://fips-agents.github.io/examples/
+repo_url: https://github.com/fips-agents/examples
+repo_name: fips-agents/examples
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: red
+      accent: red
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: red
+      accent: red
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - Tutorial:
+    - Overview: index.md
+    - "1. Scaffold Your Agent": 01-scaffold-agent.md
+    - "2. Configure and Deploy": 02-configure-and-deploy.md
+    - "3. Build an MCP Server": 03-build-mcp-server.md
+    - "4. Wire MCP to Agent": 04-wire-mcp-to-agent.md
+    - "5. Gateway and UI": 05-gateway-and-ui.md
+    - "6. Extend with AI": 06-extend-with-ai.md
+    - "7. Production Hardening": 07-secrets-and-production.md
+  - Reference:
+    - "agent.yaml": reference/agent-yaml.md
+    - "Helm Chart": reference/helm-chart.md
+    - "Makefile Targets": reference/makefile.md
+    - "BaseAgent API": reference/baseagent-api.md
+    - "MCP Protocol": reference/mcp-protocol.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/fips-agents

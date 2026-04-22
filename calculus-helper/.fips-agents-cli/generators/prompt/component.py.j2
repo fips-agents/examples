@@ -1,0 +1,113 @@
+"""{{ description }}"""
+
+from pydantic import Field
+{% if needs_prompt_imports -%}
+from fastmcp.prompts import Message
+{% endif -%}
+{% if with_context -%}
+from fastmcp import Context
+{% endif -%}
+from fastmcp.prompts import prompt
+
+
+{% if prompt_name or title or tags or meta -%}
+@prompt(
+{%- if prompt_name %}
+    name="{{ prompt_name }}",
+{%- endif %}
+{%- if title %}
+    title="{{ title }}",
+{%- endif %}
+{%- if description and (prompt_name or title or tags or meta) %}
+    description="{{ description }}",
+{%- endif %}
+{%- if tags %}
+    tags={{ '{' }}{% for tag in tags %}"{{ tag }}"{% if not loop.last %}, {% endif %}{% endfor %}{{ '}' }},
+{%- endif %}
+{%- if meta %}
+    meta={{ meta }},
+{%- endif %}
+)
+{% else -%}
+@prompt
+{% endif -%}
+{% if async %}async {% endif %}def {{ component_name }}(
+{% if with_context %}    ctx: Context,
+{% endif %}{% for param in params %}    {{ param.name }}: {{ param.type_hint }} = Field(
+{% if param.default is defined %}        default={{ param.default }},
+{% endif %}        description="{{ param.description }}"
+    ),
+{% endfor %}) -> {{ return_type }}:
+    """{{ description }}
+
+    Args:
+{% if params|length > 0 %}{% for param in params %}        {{ param.name }}: {{ param.description }}
+{% endfor %}{% endif %}{% if with_context %}        ctx: FastMCP Context object for accessing request metadata
+{% endif %}
+    Returns:
+        {{ return_description|default('Formatted prompt for LLM interaction') }}
+    """
+{% if return_type == "str" %}
+    return f"""{{ prompt_instruction|default('Analyze and process the following:') }}
+
+{% for param in params %}{% if not param.get('optional', False) %}<{{ param.name }}>
+{{ '{' }}{{ param.name }}{{ '}' }}
+</{{ param.name }}>
+
+{% endif %}{% endfor %}
+{%- if with_schema %}
+Return as JSON:
+{{ '{' }}
+  "result": "{{ result_field|default('Main result') }}",
+  "details": "{{ details_field|default('Additional details') }}"
+{{ '}' }}
+{%- else %}
+# TODO: Add specific prompt instructions
+# Provide clear, structured guidance for the LLM
+{%- endif %}"""
+
+{% elif return_type == "Message" %}
+    content = f"""{{ prompt_instruction|default('Analyze and process the following:') }}
+
+{% for param in params %}{% if not param.get('optional', False) %}<{{ param.name }}>
+{{ '{' }}{{ param.name }}{{ '}' }}
+</{{ param.name }}>
+
+{% endif %}{% endfor %}
+{%- if with_schema %}
+Return as JSON:
+{{ '{' }}
+  "result": "{{ result_field|default('Main result') }}",
+  "details": "{{ details_field|default('Additional details') }}"
+{{ '}' }}
+{%- else %}
+# TODO: Add specific prompt instructions
+{%- endif %}"""
+
+    return Message(content)
+
+{% elif return_type == "list[Message]" %}
+    # Generate a multi-message conversation
+    messages = [
+        Message(f"""{{ prompt_instruction|default('Analyze and process the following:') }}
+
+{% for param in params %}{% if not param.get('optional', False) %}<{{ param.name }}>
+{{ '{' }}{{ param.name }}{{ '}' }}
+</{{ param.name }}>
+
+{% endif %}{% endfor %}
+{%- if with_schema %}
+Return as JSON:
+{{ '{' }}
+  "result": "{{ result_field|default('Main result') }}",
+  "details": "{{ details_field|default('Additional details') }}"
+{{ '}' }}
+{%- else %}
+# TODO: Add specific prompt instructions
+{%- endif %}"""),
+        # TODO: Add additional messages for conversation context
+        # Message("Response or context", role="assistant"),
+    ]
+
+    return messages
+{% endif %}

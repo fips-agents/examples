@@ -1,0 +1,231 @@
+# agent.yaml -- My Agent
+#
+# Framework: fipsagents (BaseAgent)
+#   Monorepo: packages/fipsagents/   |  PyPI: pip install fipsagents
+#   Docs:     see packages/fipsagents/README.md for the full API reference
+#
+# Configuration for a research-assistant agent built on BaseAgent.
+# Every value supports ${VAR:-default} env-var substitution so the same
+# file works unchanged for local development and OpenShift deployment.
+#
+# Local dev:  sensible defaults work out of the box -- just run the agent.
+# Production: set env vars via ConfigMap / Secrets.  Override only what
+#             differs from the defaults below.
+
+# -- Agent identity ------------------------------------------------------------
+#
+# Name, description, and version for logging and the /v1/agent-info endpoint.
+# Populated by /create-agent from AGENT_PLAN.md.
+#
+# Production env vars:
+#   AGENT_NAME -- override the agent name per deployment
+agent:
+  name: ${AGENT_NAME:-my-agent}
+  description: "A brief description of what this agent does"
+  version: 0.1.0
+
+# -- LLM provider and generation settings ------------------------------------
+#
+# `name` is the model identifier passed to the OpenAI-compatible endpoint.
+# Point `endpoint` at vLLM, LlamaStack, llm-d, or any OpenAI-compatible API.
+#
+# Production env vars:
+#   MODEL_ENDPOINT  -- vLLM / LlamaStack URL (e.g. https://vllm.apps.cluster.example.com/v1)
+#   MODEL_NAME      -- deployed model identifier
+#   OPENAI_API_KEY  -- required by the openai SDK even for unauthenticated vLLM endpoints;
+#                      set to any non-empty string (e.g. "not-required")
+model:
+  endpoint: ${MODEL_ENDPOINT:-http://llamastack:8321/v1}
+  name: ${MODEL_NAME:-meta-llama/Llama-3.3-70B-Instruct}
+  temperature: 0.7
+  max_tokens: 4096
+
+# -- MCP servers --------------------------------------------------------------
+#
+# Remote tool servers the agent connects to at startup.  BaseAgent discovers
+# three capability types from each server:
+#
+#   Tools:     Auto-registered with llm_only visibility.  The LLM decides
+#              when to call them, just like local tools.
+#
+#   Prompts:   Available via self.get_mcp_prompt(name, arguments).
+#              Use self.list_mcp_prompts() to see what a server provides.
+#
+#   Resources: Available via self.read_resource(uri).
+#              Use self.list_mcp_resources() for discovery.
+#              Resource templates: self.list_mcp_resource_templates().
+#
+# Each entry needs either a `url` (HTTP transport) or a `command` (stdio):
+#
+#   - url: http://search-mcp:8080/mcp              # HTTP
+#   - command: /path/to/mcp-server                  # stdio
+#     args: [--verbose]
+#     env: {API_KEY: "${SEARCH_API_KEY}"}
+#
+# Production env vars (example):
+#   MCP_SEARCH_URL  -- URL for a web-search MCP server
+#
+# mcp_servers:
+#   - url: ${MCP_SEARCH_URL:-http://search-mcp:8080/mcp}
+mcp_servers:
+  - url: ${MCP_CALCULUS_URL:-http://calculus-mcp:8080/mcp/}
+
+# -- Local tools ---------------------------------------------------------------
+#
+# Tools are auto-discovered from `local_dir` at startup.
+# `visibility_default` controls the default plane for tools that don't
+# declare their own visibility via the @tool decorator:
+#   agent_only  -- callable from agent code only (plane 1)
+#   llm_only    -- surfaced to the LLM for tool calling (plane 2)
+#   both        -- accessible from either plane
+tools:
+  local_dir: ./tools
+  visibility_default: agent_only
+
+# -- Prompt templates ----------------------------------------------------------
+#
+# Markdown files with YAML frontmatter, one per file.
+# Loaded via self.load_prompt(name, **variables).
+# `system` designates which prompt becomes the system prompt.  Defaults to
+# "system" (i.e. prompts/system.md).  Supports env-var substitution.
+prompts:
+  dir: ./prompts
+  system: system          # prompt file to load as the system prompt (prompts/system.md)
+
+# -- Agent loop ----------------------------------------------------------------
+#
+# max_iterations: hard ceiling on step() calls per run() invocation.
+#                 Prevents runaway loops.  100 is generous for most agents;
+#                 lower it for tightly scoped tasks.
+#
+# backoff: exponential backoff applied when step() raises a retryable error.
+#   initial    -- first delay in seconds
+#   max        -- ceiling on delay (seconds)
+#   multiplier -- factor applied after each retry (must be > 1.0)
+#
+# Production env vars:
+#   MAX_ITERATIONS -- override the iteration cap per deployment
+loop:
+  max_iterations: ${MAX_ITERATIONS:-100}
+  backoff:
+    initial: 1.0
+    max: 30.0
+    multiplier: 2.0
+
+# -- Logging -------------------------------------------------------------------
+#
+# Standard Python log levels: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+# Set to DEBUG locally for verbose output; keep INFO or WARNING in production.
+#
+# Production env vars:
+#   LOG_LEVEL -- e.g. WARNING
+logging:
+  level: ${LOG_LEVEL:-INFO}
+
+# -- Server --------------------------------------------------------------------
+#
+# HTTP server binding for the OpenAI-compatible API.  The Helm chart's
+# service.port should match `port` here.
+#
+# Production env vars:
+#   HOST -- bind address (useful for local-only testing with 127.0.0.1)
+#   PORT -- bind port (some platforms inject this automatically)
+server:
+  host: ${HOST:-0.0.0.0}
+  port: ${PORT:-8080}
+
+# -- Memory backend (optional) -----------------------------------------------
+#
+# Controls which memory backend the agent uses.
+#
+# backend: which backend to use.  When omitted, auto-detects by looking
+#          for .memoryhub.yaml (backward compatible).
+#   memoryhub -- MemoryHub SDK (default when .memoryhub.yaml exists)
+#   sqlite    -- Local SQLite with FTS5 search (zero dependencies)
+#   pgvector  -- PostgreSQL + pgvector for semantic search
+#   custom    -- Bring your own MemoryClientBase subclass
+#   null      -- Explicitly disable memory
+#
+# config_path: path to the backend-specific config file.
+#   For memoryhub: .memoryhub.yaml (generated by `memoryhub config init`)
+#   For sqlite:    .memory-sqlite.yaml
+#   For pgvector:  .memory-pgvector.yaml
+#
+# backend_class: dotted import path, only used when backend: custom
+#   Example: myproject.memory.RedisMemoryClient
+#
+# Production env vars:
+#   MEMORY_BACKEND -- override the backend choice per deployment
+memory:
+  backend: ${MEMORY_BACKEND:-}
+  config_path: .memoryhub.yaml
+  # backend_class: null
+
+# -- Security ------------------------------------------------------------------
+#
+# Controls security inspection, audit logging, and enforcement behavior.
+# Global mode sets the default; per-layer mode overrides it.
+#
+#   mode: enforce      -- block on findings (production default)
+#   mode: observe      -- log findings but allow execution (for tuning)
+#
+security:
+  mode: ${SECURITY_MODE:-enforce}
+  tool_inspection:
+    enabled: ${TOOL_INSPECTION_ENABLED:-true}
+#    mode: observe     # override global mode for this layer
+#  guardrails:
+#    mode: observe     # override global mode for guardrails
+
+# -- Node deployment topology (optional) -------------------------------------
+#
+# Maps workflow node names to their deployment topology.  Nodes default to
+# local (in-process).  Set type: remote to delegate processing to an
+# already-deployed agent via HTTP POST.
+#
+# The runner auto-wraps remote nodes -- the graph definition stays
+# topology-agnostic.  Same graph works for local dev and production.
+#
+# Remote contract:
+#   POST {endpoint}{path}
+#   Body:  {"state": {...}, "state_type": "fully.qualified.ClassName"}
+#   Reply: {"state": {...}}
+#
+# Production env vars (example):
+#   RESEARCH_AGENT_URL -- URL of a separately deployed research agent
+#
+# nodes:
+#   classify:
+#     type: local
+#   research:
+#     type: remote
+#     endpoint: ${RESEARCH_AGENT_URL:-http://research-agent:8080}
+#     path: /process        # default
+#     timeout: 30.0         # seconds, default
+#     retries: 2            # HTTP-level retries (runner also retries via node_retries)
+nodes: {}
+
+# -- Code execution sandbox (optional) ----------------------------------------
+#
+# The code_executor tool sends LLM-generated Python code to a sandbox sidecar
+# for safe execution.  The sidecar runs in the same pod and is reachable at
+# localhost:8000.  Enable it in your Helm values:
+#
+#   sandbox:
+#     enabled: true
+#     image:
+#       repository: quay.io/yourorg/code-sandbox
+#       tag: latest
+#
+# The tool reads SANDBOX_URL from the environment (set automatically by the
+# Helm chart when sandbox.enabled=true).  For local development, start the
+# sidecar manually:
+#
+#   cd sandbox && uvicorn sandbox.app:app --port 8000
+#
+# Available modules in the sandbox:
+#   math, statistics, itertools, functools, re, datetime, collections,
+#   json, csv, string, textwrap, decimal, fractions, random, operator, typing
+#
+# Production env vars:
+#   SANDBOX_URL -- override the sidecar URL (default: http://localhost:8000)

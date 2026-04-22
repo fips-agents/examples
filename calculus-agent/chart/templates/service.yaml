@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ecosystem-test-agent.fullname" . }}
+  labels:
+    {{- include "ecosystem-test-agent.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "ecosystem-test-agent.selectorLabels" . | nindent 4 }}

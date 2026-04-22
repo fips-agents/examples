@@ -1,0 +1,112 @@
+# Default values for ecosystem-test-agent.
+
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+image:
+  repository: ecosystem-test-agent
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Resource requests and limits.
+# Agents are typically CPU-light and memory-moderate (LLM calls are remote).
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# agent.yaml overrides injected via ConfigMap.
+# These environment variables are substituted into agent.yaml at runtime
+# using the ${VAR:-default} pattern.  Only set values that differ from
+# the defaults baked into the image.
+config:
+  # MODEL_ENDPOINT: https://vllm.apps.cluster.example.com/v1
+  # MODEL_NAME: meta-llama/Llama-3.3-70B-Instruct
+  # MAX_ITERATIONS: "50"
+  # LOG_LEVEL: WARNING
+
+# Additional environment variables (name/value pairs).
+# Use this for variables not covered by the config section, or for
+# referencing Secrets.
+#
+# Example:
+#   env:
+#     - name: API_KEY
+#       valueFrom:
+#         secretKeyRef:
+#           name: agent-secrets
+#           key: api-key
+env: []
+
+probes:
+  enabled: false
+
+service:
+  port: 8080
+
+route:
+  enabled: false
+  host: ""
+  # TLS configuration for OpenShift Route.
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+# -- Code execution sandbox sidecar (optional) --------------------------------
+# Enable to run LLM-generated Python code safely.  The sidecar shares the pod
+# network namespace, so the code_executor tool reaches it at localhost:8000.
+#
+# Prerequisites:
+#   1. Add tools/code_executor.py to your agent (see /add-tool).
+#   2. Build and push the sandbox image from sandbox/ at the repo root.
+sandbox:
+  enabled: false
+  # Sandbox profile: minimal, data-science, financial, code-analysis.
+  # Controls which imports are allowed and which scan stages run.
+  # The image tag should match the profile (e.g., "0.5.0-data-science").
+  # Sets SANDBOX_PROFILE env var in the sandbox container.
+  profile: minimal
+  image:
+    repository: code-sandbox
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # Custom seccomp profile for the sandbox container.
+  # Blocks networking syscalls (socket, connect, bind) and dangerous
+  # operations (ptrace, mount, io_uring) at the kernel level.
+  #
+  # Prerequisites:
+  #   1. Security Profiles Operator (SPO) installed on the cluster
+  #      (GA since OCP 4.12 — install from OperatorHub).
+  #   2. A custom SCC or SPO ProfileBinding that permits Localhost
+  #      seccomp profiles (restricted-v2 only allows RuntimeDefault).
+  seccomp:
+    enabled: false
+
+# -- FIPS cluster notes -------------------------------------------------------
+# No FIPS-specific configuration is required. UBI base images ship
+# FIPS-aware OpenSSL and respect the host kernel's fips=1 mode
+# automatically.
+#
+# Validated behavior (OCP 4.20.17, OpenSSL 3.5.1, 2026-04-15):
+#   - Sandbox: python3 -I subprocess inherits FIPS mode. hashlib.md5()
+#     raises UnsupportedDigestmodError; md5(usedforsecurity=False) works.
+#     hashlib.sha1() is NOT blocked by FIPS. Guardrails fire before FIPS
+#     for both md5 and sha1 with actionable error messages.
+#   - TLS: 21 AEAD-only ciphers (AES-GCM/CCM, TLSv1.2/1.3). SHA-1
+#     signed certs from external sources can be verified. Endpoints
+#     requiring non-AEAD cipher suites (CBC, RC4) cannot negotiate.
+#   - Seccomp/Landlock: Kernel mechanisms, unaffected by FIPS.
+#
+# See research/sandbox-hardening-v2.md Finding 5 for full test results.

@@ -1,0 +1,38 @@
+# Gitleaks configuration for calculus-helper-mcp-demo.
+#
+# The server holds no real secrets -- it's a stateless calculus tool.  The
+# allowlist below manages the narrow set of false positives that do appear:
+# a test-only HS256 signing key (clearly labelled), documentation placeholders,
+# and third-party code under .venv/ that we don't scan.
+
+[allowlist]
+  description = "Allowlist for documentation examples, test fixtures, and vendored code"
+
+  # Do not scan these paths at all.
+  paths = [
+    '''\.venv\/''',
+    '''\.git\/''',
+    '''__pycache__\/''',
+    # Markdown docs routinely contain curl / JWT examples that look like secrets.
+    '''README\.md$''',
+    '''SYSTEM_PROMPT\.md$''',
+    '''docs\/.*\.md$''',
+    '''retrospectives\/''',
+  ]
+
+  # Substrings/regexes that are known-safe values appearing in the source tree.
+  regexes = [
+    # tests/test_auth_pipeline.py uses this HS256 signing key on purpose --
+    # it's self-labelling and never used outside the test harness.
+    '''test-secret-key-for-hs256-do-not-use-in-production''',
+
+    # Generic placeholder patterns used in examples/docs.
+    '''dev-alice''',
+    '''admin-token''',
+    '''readonly-token''',
+    '''YOUR_TOKEN''',
+    '''YOUR_.*_HERE''',
+
+    # Truncated JWT examples ending with ... are illustrative, not real tokens.
+    '''eyJ[a-zA-Z0-9]+\.\.\.''',
+  ]

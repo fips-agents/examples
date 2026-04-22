@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ecosystem-test-agent"
+version = "0.6.0"
+description = "BaseAgent framework — production-ready AI agent for OpenShift"
+requires-python = ">=3.11"
+dependencies = [
+    "fipsagents[server]",
+]
+
+[project.optional-dependencies]
+memory = [
+    "fipsagents[memory]",
+]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
