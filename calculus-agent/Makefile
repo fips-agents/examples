@@ -10,8 +10,8 @@
 # ---------------------------------------------------------------------------
 VENV        ?= .venv
 PYTHON      ?= python3
-PROJECT     ?= ecosystem-test-agent
-IMAGE_NAME  ?= ecosystem-test-agent
+PROJECT     ?= calculus-agent
+IMAGE_NAME  ?= calculus-agent
 IMAGE_TAG   ?= latest
 
 # Derived

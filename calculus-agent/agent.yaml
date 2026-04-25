@@ -26,15 +26,26 @@ agent:
 
 # -- LLM provider and generation settings ------------------------------------
 #
-# `name` is the model identifier passed to the OpenAI-compatible endpoint.
-# Point `endpoint` at vLLM, LlamaStack, llm-d, or any OpenAI-compatible API.
+# `provider` selects the LLM backend.  Defaults to "openai" (any OpenAI-
+# compatible endpoint: vLLM, LlamaStack, llm-d).  Set to "anthropic",
+# "bedrock", or "azure" to route traffic through the adapter sidecar at
+# localhost:8081/v1.  The adapter sidecar must be enabled in
+# chart/values.yaml (llm_adapter.enabled: true).
+#
+# When provider is non-openai, MODEL_ENDPOINT is ignored -- the framework
+# routes traffic to the sidecar automatically.
+#
+# `name` is the model identifier passed to the endpoint (or adapter).
+# `endpoint` points at vLLM, LlamaStack, llm-d, or any OpenAI-compatible API.
 #
 # Production env vars:
-#   MODEL_ENDPOINT  -- vLLM / LlamaStack URL (e.g. https://vllm.apps.cluster.example.com/v1)
+#   MODEL_PROVIDER  -- openai | anthropic | bedrock | azure
+#   MODEL_ENDPOINT  -- vLLM / LlamaStack URL (ignored for non-openai providers)
 #   MODEL_NAME      -- deployed model identifier
-#   OPENAI_API_KEY  -- required by the openai SDK even for unauthenticated vLLM endpoints;
-#                      set to any non-empty string (e.g. "not-required")
+#   OPENAI_API_KEY  -- required by the openai SDK even for unauthenticated vLLM
+#                      endpoints; set to any non-empty string (e.g. "not-required")
 model:
+  provider: ${MODEL_PROVIDER:-openai}
   endpoint: ${MODEL_ENDPOINT:-http://llamastack:8321/v1}
   name: ${MODEL_NAME:-meta-llama/Llama-3.3-70B-Instruct}
   temperature: 0.7
@@ -137,30 +148,60 @@ server:
   # -- Storage backend (optional) -----------------------------------------------
   #
   # Shared storage for session persistence and trace collection.
-  # When backend is null (default), both features degrade to no-ops.
+  # When backend is null (default), both features degrade to no-ops --
+  # fully backward-compatible.
+  #
+  # Production env vars:
+  #   STORAGE_BACKEND -- "sqlite" or "postgres"
+  #   SQLITE_PATH     -- path to SQLite file (default: ./agent.db)
+  #   DATABASE_URL    -- PostgreSQL connection string (for postgres backend)
   storage:
     backend: ${STORAGE_BACKEND:-}
     sqlite_path: ${SQLITE_PATH:-./agent.db}
+  #   database_url: ${DATABASE_URL:-}
 
   # -- Session persistence (optional) -------------------------------------------
   #
-  # REST endpoints: POST /v1/sessions, GET /v1/sessions/{id}, DELETE /v1/sessions/{id}
-  # Pass session_id on ChatCompletionRequest to reuse context across requests.
+  # Enables conversation continuity across requests.  Requires a storage
+  # backend (sqlite or postgres) to persist session state.
+  #
+  # REST endpoints:  POST /v1/sessions, GET /v1/sessions/{id},
+  #                  DELETE /v1/sessions/{id}
+  # Per-request:     pass session_id on ChatCompletionRequest to reuse context
+  # Auto-create:     sessions are created on first use (explicit POST optional)
   sessions:
     enabled: ${SESSIONS_ENABLED:-false}
-    max_age_hours: 168
+    max_age_hours: 168           # sessions expire after 7 days
 
   # -- Trace collection (optional) ----------------------------------------------
   #
-  # TraceCollector builds span trees from StreamEvents.
-  # Query via GET /v1/traces, GET /v1/traces/{id}.
+  # TraceCollector observes astep_stream() and builds span trees from
+  # StreamEvents.  Traces are queryable via GET /v1/traces.
+  #
+  # exporter:
+  #   store  -- persist to the storage backend (default when enabled)
+  #   otel   -- export to OpenTelemetry Collector via OTLP (requires [otel] extra)
+  #
+  # Production env vars:
+  #   TRACES_ENABLED  -- "true" to enable
+  #   OTEL_ENDPOINT   -- OTLP gRPC endpoint (e.g. http://otel-collector:4317)
   traces:
     enabled: ${TRACES_ENABLED:-false}
     sampling_rate: 1.0
+  #   exporter: store            # or: otel
+  #   otel_endpoint: ${OTEL_ENDPOINT:-}
+  #   service_name: ${OTEL_SERVICE_NAME:-fipsagents}
 
   # -- Prometheus metrics (optional) --------------------------------------------
   #
-  # Exposed at GET /metrics. Requires [metrics] extra.
+  # Records request/tool/token counters and duration histograms.
+  # Exposed at GET /metrics in Prometheus text format.
+  # Requires the [metrics] extra:  pip install fipsagents[metrics]
+  #
+  # Available metrics:
+  #   agent_requests_total, agent_request_duration_seconds,
+  #   agent_model_call_duration_seconds, agent_tool_call_total,
+  #   agent_tokens_total
   metrics:
     enabled: ${METRICS_ENABLED:-false}
 
@@ -171,6 +212,7 @@ server:
 # backend: which backend to use.  When omitted, auto-detects by looking
 #          for .memoryhub.yaml (backward compatible).
 #   memoryhub -- MemoryHub SDK (default when .memoryhub.yaml exists)
+#   markdown  -- Human-readable markdown file(s) (zero dependencies)
 #   sqlite    -- Local SQLite with FTS5 search (zero dependencies)
 #   pgvector  -- PostgreSQL + pgvector for semantic search
 #   custom    -- Bring your own MemoryClientBase subclass
@@ -184,12 +226,40 @@ server:
 # backend_class: dotted import path, only used when backend: custom
 #   Example: myproject.memory.RedisMemoryClient
 #
+# Budget presets (set one and forget individual tuning):
+#   budget: small   -- 500 chars, 5 results, min_weight 0.7  (8K-16K models)
+#   budget: medium  -- 4K chars, 20 results, min_weight 0.5  (32K-128K models)
+#   budget: large   -- 8K chars, 50 results, min_weight 0.3  (128K+ models)
+#   Explicit values for max_prefix_chars/max_results/min_weight override presets.
+#
+# Injection mode (how memories reach the model):
+#   injection_mode: prefix     -- (default) separate message before user turn
+#   injection_mode: user_turn  -- append to user message inside XML tags;
+#                                 required for small models (8K-16K) that
+#                                 ignore system-level memory
+#   injection_tag: user_memories  -- XML tag name (only with user_turn mode)
+#
+# Loading pattern (when to retrieve memories):
+#   loading_pattern: eager           -- at setup time (default, best for prefix caching)
+#   loading_pattern: lazy            -- after first user message arrives
+#   loading_pattern: lazy_with_rebias -- lazy + re-retrieve after topic shift
+#   loading_pattern: jit             -- just-in-time, every turn
+#   For MemoryHub backends, .memoryhub.yaml pattern takes precedence unless
+#   loading_pattern is set explicitly here.
+#
 # Production env vars:
 #   MEMORY_BACKEND -- override the backend choice per deployment
 memory:
   backend: ${MEMORY_BACKEND:-}
   config_path: .memoryhub.yaml
   # backend_class: null
+  # budget: medium             # or: small, large, custom
+  # injection_mode: prefix     # or: user_turn
+  # injection_tag: user_memories
+  # loading_pattern: eager     # or: lazy, lazy_with_rebias, jit
+  # max_prefix_chars: 8000     # 0 disables limit
+  # max_results: 50
+  # min_weight: 0.0            # 0.0 = no filtering
 
 # -- Security ------------------------------------------------------------------
 #
@@ -244,7 +314,7 @@ nodes: {}
 #   sandbox:
 #     enabled: true
 #     image:
-#       repository: code-sandbox
+#       repository: quay.io/yourorg/code-sandbox
 #       tag: latest
 #
 # The tool reads SANDBOX_URL from the environment (set automatically by the

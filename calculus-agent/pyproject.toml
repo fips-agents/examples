@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ecosystem-test-agent"
+name = "calculus-agent"
 version = "0.6.0"
 description = "BaseAgent framework — production-ready AI agent for OpenShift"
 requires-python = ">=3.11"

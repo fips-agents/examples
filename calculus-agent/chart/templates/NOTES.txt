@@ -1,4 +1,4 @@
-Agent "{{ include "ecosystem-test-agent.fullname" . }}" deployed to namespace {{ .Release.Namespace }}.
+Agent "{{ include "calculus-agent.fullname" . }}" deployed to namespace {{ .Release.Namespace }}.
 
 Check pod status:
 
@@ -12,7 +12,7 @@ View agent logs:
 
 Route:
 
-  https://{{ .Values.route.host | default (printf "%s-%s.apps.cluster.example.com" (include "ecosystem-test-agent.fullname" .) .Release.Namespace) }}
+  https://{{ .Values.route.host | default (printf "%s-%s.apps.cluster.example.com" (include "calculus-agent.fullname" .) .Release.Namespace) }}
 {{- end }}
 
 Override agent.yaml config by setting values under the `config` key:

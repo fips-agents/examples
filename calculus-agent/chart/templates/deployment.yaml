@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "ecosystem-test-agent.fullname" . }}
+  name: {{ include "calculus-agent.fullname" . }}
   labels:
-    {{- include "ecosystem-test-agent.labels" . | nindent 4 }}
+    {{- include "calculus-agent.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "ecosystem-test-agent.selectorLabels" . | nindent 6 }}
+      {{- include "calculus-agent.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
         # Roll pods on ConfigMap changes.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
-        {{- include "ecosystem-test-agent.selectorLabels" . | nindent 8 }}
+        {{- include "calculus-agent.selectorLabels" . | nindent 8 }}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -38,8 +38,8 @@ spec:
             # readOnlyRootFilesystem: true
           envFrom:
             - configMapRef:
-                name: {{ include "ecosystem-test-agent.fullname" . }}-config
-          {{- if or .Values.env .Values.sandbox.enabled }}
+                name: {{ include "calculus-agent.fullname" . }}-config
+          {{- if or .Values.env .Values.sandbox.enabled .Values.llm_adapter.enabled }}
           env:
             {{- if .Values.env }}
             {{- toYaml .Values.env | nindent 12 }}
@@ -47,6 +47,10 @@ spec:
             {{- if .Values.sandbox.enabled }}
             - name: SANDBOX_URL
               value: "http://localhost:8000"
+            {{- end }}
+            {{- if .Values.llm_adapter.enabled }}
+            - name: LLM_ADAPTER_URL
+              value: "http://localhost:8081/v1"
             {{- end }}
           {{- end }}
           resources:
@@ -85,7 +89,7 @@ spec:
             {{- if .Values.sandbox.seccomp.enabled }}
             seccompProfile:
               type: Localhost
-              localhostProfile: operator/{{ include "ecosystem-test-agent.fullname" . }}-sandbox.json
+              localhostProfile: operator/{{ include "calculus-agent.fullname" . }}-sandbox.json
             {{- end }}
           resources:
             {{- toYaml .Values.sandbox.resources | nindent 12 }}
@@ -104,6 +108,43 @@ spec:
           volumeMounts:
             - name: sandbox-tmp
               mountPath: /tmp
+        {{- end }}
+        {{- if .Values.llm_adapter.enabled }}
+        - name: llm-adapter
+          image: "{{ .Values.llm_adapter.image.repository }}:{{ .Values.llm_adapter.image.tag }}"
+          imagePullPolicy: {{ .Values.llm_adapter.image.pullPolicy }}
+          ports:
+            - name: adapter
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: ADAPTER_PROVIDER
+              value: {{ .Values.llm_adapter.provider | quote }}
+          {{- if .Values.llm_adapter.secretRef.name }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.llm_adapter.secretRef.name }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            {{- toYaml .Values.llm_adapter.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 3
+            periodSeconds: 10
         {{- end }}
       {{- if .Values.sandbox.enabled }}
       volumes:

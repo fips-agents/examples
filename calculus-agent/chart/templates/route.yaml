@@ -2,16 +2,16 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: {{ include "ecosystem-test-agent.fullname" . }}
+  name: {{ include "calculus-agent.fullname" . }}
   labels:
-    {{- include "ecosystem-test-agent.labels" . | nindent 4 }}
+    {{- include "calculus-agent.labels" . | nindent 4 }}
 spec:
   {{- if .Values.route.host }}
   host: {{ .Values.route.host }}
   {{- end }}
   to:
     kind: Service
-    name: {{ include "ecosystem-test-agent.fullname" . }}
+    name: {{ include "calculus-agent.fullname" . }}
     weight: 100
   port:
     targetPort: http

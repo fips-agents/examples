@@ -1,0 +1,15 @@
+{
+  "generator": {
+    "tool": "fips-agents-cli",
+    "version": "0.8.1"
+  },
+  "template": {
+    "url": "https://github.com/fips-agents/agent-template",
+    "commit": "372a95ae7efe",
+    "full_commit": "372a95ae7efeb378ccb7b906e1c4cbf17c1bcd7c"
+  },
+  "project": {
+    "name": "calculus-agent",
+    "created_at": "2026-04-25T23:27:26.977555+00:00"
+  }
+}
