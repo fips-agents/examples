@@ -4,6 +4,8 @@ A hands-on tutorial that takes you from zero to a deployed AI agent system
 on Red Hat OpenShift, using the [fips-agents](https://github.com/fips-agents)
 framework.
 
+This tutorial was last verified against **fipsagents v0.11.0** (April 2026).
+
 ## What you'll build
 
 By the end of this tutorial, you'll have a complete system running on OpenShift:
@@ -40,7 +42,7 @@ Browser → Chat UI → Gateway → Agent → MCP Server (calculus tools)
 | [5. Gateway and UI](05-gateway-and-ui.md) | Deploy the full stack, test end-to-end |
 | [6. Code Execution Sandbox](06-code-sandbox.md) | Deploy a sandbox, give the agent code execution |
 | [7. Extend with AI](07-extend-with-ai.md) | Use AI-assisted slash commands to add capabilities |
-| [8. Production Hardening](08-secrets-and-production.md) | Secrets, FIPS, scaling, monitoring |
+| [8. Production Hardening](08-secrets-and-production.md) | Secrets, FIPS, scaling, observability (metrics, traces, sessions) |
 
 ## Reference
 

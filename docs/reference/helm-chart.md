@@ -86,6 +86,16 @@ strings like `"50"` are preserved correctly.
 |-----|------|-------------|
 | `config.<NAME>` | string | Injected as env var `<NAME>` into the agent container via `envFrom`. |
 
+As of v0.11.0, the following ConfigMap keys control the observability and
+storage features added in that release:
+
+| Key | Description | Default (if unset) |
+|-----|-------------|--------------------|
+| `STORAGE_BACKEND` | Persistence backend for sessions and traces (`null`, `sqlite`, `postgres`) | `null` |
+| `SESSIONS_ENABLED` | Enable session persistence | `false` |
+| `TRACES_ENABLED` | Enable trace collection | `false` |
+| `METRICS_ENABLED` | Enable Prometheus metrics at `/metrics` | `false` |
+
 !!! tip "Prompts are not in ConfigMaps"
     Prompts, rules, and skills are baked into the container image, not injected
     via ConfigMaps. This provides version traceability -- the image SHA pins the
@@ -291,6 +301,89 @@ Prerequisites:
 | values.yaml key | Resource field | Default |
 |-----------------|----------------|---------|
 | `sandbox.seccomp.enabled` | Controls presence of `seccompProfile` on sandbox container | `false` |
+
+### LLM adapter sidecar (conditional)
+
+When `llm_adapter.enabled` is `true` (or when `ADAPTER_PROVIDER` is set in
+the ConfigMap), a second sidecar container is added to the pod. This container
+runs the LLM adapter, which translates OpenAI-compatible requests to other
+provider APIs. The agent reaches it at `localhost:8081` (pods share a network
+namespace).
+
+The entire sidecar block is wrapped in `{{- if .Values.llm_adapter.enabled }}`.
+When disabled (the default), no adapter container or env vars are added.
+
+#### What changes when `llm_adapter.enabled: true`
+
+1. An `llm-adapter` container is added to `spec.containers`.
+2. Provider-specific env vars are injected into the adapter container (e.g.,
+   `ADAPTER_PROVIDER`, `ANTHROPIC_API_KEY`, `AWS_ACCESS_KEY_ID`,
+   `AZURE_OPENAI_ENDPOINT`).
+3. Liveness and readiness probes target `localhost:8081/healthz`.
+
+The adapter supports 8 providers: Anthropic, Bedrock (Claude), Bedrock
+Converse, Azure OpenAI, OpenAI-compatible, Ollama, llama.cpp, and Vertex
+AI/Gemini.
+
+The agent's `model.provider` in `agent.yaml` should match the adapter
+provider so that BaseAgent sends requests to `localhost:8081` in the correct
+format.
+
+#### LLM adapter container configuration
+
+```yaml
+- name: llm-adapter
+  image: "{{ .Values.llm_adapter.image.repository }}:{{ .Values.llm_adapter.image.tag }}"
+  ports:
+    - name: adapter
+      containerPort: 8081
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8081
+    initialDelaySeconds: 5
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 8081
+    initialDelaySeconds: 3
+    periodSeconds: 10
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+```
+
+| values.yaml key | Resource field | Default |
+|-----------------|----------------|---------|
+| `llm_adapter.enabled` | Controls presence of the sidecar | `false` |
+| `llm_adapter.image.repository` | Adapter container image name | `llm-adapter` |
+| `llm_adapter.image.tag` | Adapter container image tag | `latest` |
+| `llm_adapter.image.pullPolicy` | Adapter `imagePullPolicy` | `IfNotPresent` |
+| `llm_adapter.resources.requests.cpu` | Adapter CPU request | `100m` |
+| `llm_adapter.resources.requests.memory` | Adapter memory request | `128Mi` |
+| `llm_adapter.resources.limits.cpu` | Adapter CPU limit | `500m` |
+| `llm_adapter.resources.limits.memory` | Adapter memory limit | `256Mi` |
+
+#### values.yaml defaults
+
+```yaml
+llm_adapter:
+  enabled: false
+  image:
+    repository: llm-adapter
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+```
 
 ## Service
 

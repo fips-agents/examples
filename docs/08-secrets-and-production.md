@@ -3,7 +3,8 @@
 Your full stack is deployed: agent, MCP server, gateway, UI, and code execution
 sandbox. Everything works in development. This final module covers what it takes
 to run the stack in production -- secrets management, FIPS compliance,
-authentication, security policy, resource limits, and monitoring.
+authentication, security policy, resource limits, monitoring, and
+observability.
 
 ## FIPS compliance
 
@@ -190,10 +191,10 @@ switch to `enforce`.
 
 ### Tool inspection
 
-When `tool_inspection.enabled` is `true`, the framework validates tool inputs
-and outputs against their declared schemas before and after execution. This
-catches malformed tool calls from the LLM and unexpected return values from
-tool implementations.
+When `tool_inspection.enabled` is `true`, the ToolInspector scans tool call
+arguments for secrets, C2 patterns, and prompt injection before execution.
+Findings are logged to `fipsagents.security.audit`. In `enforce` mode,
+flagged calls are blocked; in `observe` mode, they are logged but allowed.
 
 You can override the global mode per layer. For example, to enforce tool
 inspection but only observe guardrails while tuning them:
@@ -318,6 +319,121 @@ oc annotate route calculus-gateway \
 Do the same for the agent Route if it is also directly exposed. The UI Route
 typically doesn't need a longer timeout since it serves static assets.
 
+## Observability
+
+The framework includes built-in observability features for production
+deployments: session persistence, Prometheus metrics, structured trace
+collection, and optional OpenTelemetry export. All are configured through
+`agent.yaml` and share a common storage backend.
+
+### Session persistence
+
+Enable session persistence to maintain conversation continuity across
+requests. Sessions are stored in the shared storage backend and expire
+automatically.
+
+```yaml
+server:
+  storage:
+    backend: sqlite             # or: postgres
+    sqlite_path: ./agent.db
+  sessions:
+    enabled: true
+    max_age_hours: 168          # 7-day expiry
+```
+
+Override via Helm:
+
+```bash
+helm upgrade my-agent chart/ \
+  --set config.STORAGE_BACKEND=sqlite \
+  --set config.SESSIONS_ENABLED=true
+```
+
+The server exposes `POST /v1/sessions`, `GET /v1/sessions/{id}`, and
+`DELETE /v1/sessions/{id}` for explicit session management. You can also
+pass a `session_id` on any `ChatCompletionRequest` to auto-create the
+session on first use. See the BaseAgent API reference for details.
+
+### Prometheus metrics
+
+The agent exposes Prometheus-format metrics at `GET /metrics`. Enable with:
+
+```yaml
+server:
+  metrics:
+    enabled: true
+```
+
+Requires the `[metrics]` extra: `pip install fipsagents[metrics]`.
+
+Available metrics:
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `agent_requests_total` | counter | model, status, stream |
+| `agent_request_duration_seconds` | histogram | model |
+| `agent_model_call_duration_seconds` | histogram | model |
+| `agent_tool_call_total` | counter | tool_name, status |
+| `agent_tokens_total` | counter | model, direction |
+
+To scrape metrics with OpenShift user-workload monitoring, create a
+ServiceMonitor:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: my-agent-metrics
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-agent
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+```
+
+### Trace collection
+
+TraceCollector records structured spans for every request -- model calls,
+tool invocations, and durations. Enable traces alongside storage:
+
+```yaml
+server:
+  storage:
+    backend: sqlite
+  traces:
+    enabled: true
+    sampling_rate: 1.0
+```
+
+Query traces via `GET /v1/traces` and `GET /v1/traces/{id}`. Each trace
+includes duration, span count, tool calls, and the model used. See the
+BaseAgent API reference for the full trace schema.
+
+### OTEL export (optional)
+
+For enterprise observability stacks, export traces to an OpenTelemetry
+Collector via OTLP:
+
+```yaml
+server:
+  traces:
+    enabled: true
+    exporter: otel
+    otel_endpoint: http://otel-collector:4317
+    service_name: my-agent
+```
+
+Requires the `[otel]` extra: `pip install fipsagents[otel]`.
+
+The server automatically propagates W3C Trace Context (`traceparent`
+header) -- extracting it from incoming requests and injecting it into
+outgoing RemoteNode calls. This links spans across multi-agent workflows
+into a single distributed trace without any application-level code.
+
 ## What's next
 
 You've built and hardened a complete AI agent system across eight modules:
@@ -329,7 +445,7 @@ You've built and hardened a complete AI agent system across eight modules:
 5. **Deployed** a gateway and chat UI for browser-based interaction
 6. **Added** a code execution sandbox for numerical computation
 7. **Extended** the agent with AI-assisted slash commands
-8. **Hardened** the stack with secrets, authentication, security policy, and monitoring
+8. **Hardened** the stack with secrets, authentication, security policy, monitoring, and observability
 
 The `calculus-agent/` and `calculus-helper/` directories in this repository
 serve as complete reference implementations. Use them as starting points for

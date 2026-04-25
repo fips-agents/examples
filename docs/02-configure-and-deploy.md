@@ -231,6 +231,18 @@ curl -sk "https://$ROUTE/v1/chat/completions" \
 
 If step 6 returns a JSON response with the model's answer, your agent is live.
 
+If you enabled observability features (see below), add these checks:
+
+```bash
+# 7. Prometheus metrics (if metrics enabled)
+curl -sk "https://$ROUTE/metrics"
+# Expected: Prometheus text format with agent_requests_total, etc.
+
+# 8. Trace collection (if traces enabled)
+curl -sk "https://$ROUTE/v1/traces" | python -m json.tool
+# Expected: empty JSON array []
+```
+
 ## When things go wrong
 
 These are the most common issues and how to fix them.
@@ -303,6 +315,50 @@ make redeploy PROJECT=calculus-agent
       --reuse-values \
       -n calculus-agent
     ```
+
+### Optional: Enable observability features
+
+Starting with fipsagents v0.11.0, the agent server supports session persistence,
+trace collection, and Prometheus metrics. All three are configured under the
+`server:` section of `agent.yaml`:
+
+```yaml
+server:
+  host: ${HOST:-0.0.0.0}
+  port: ${PORT:-8080}
+  storage:
+    backend: sqlite
+  sessions:
+    enabled: true
+  traces:
+    enabled: true
+  metrics:
+    enabled: true
+```
+
+To enable these in a deployed agent, pass the corresponding Helm overrides:
+
+```bash
+helm upgrade calculus-agent chart/ \
+  --set config.STORAGE_BACKEND=sqlite \
+  --set config.SESSIONS_ENABLED=true \
+  --set config.TRACES_ENABLED=true \
+  --set config.METRICS_ENABLED=true \
+  --reuse-values \
+  -n calculus-agent
+```
+
+!!! note "Prometheus metrics dependency"
+    The `/metrics` endpoint requires the `prometheus_client` library. Add the
+    `[metrics]` extra to your `pyproject.toml` dependencies:
+
+        fipsagents[metrics]
+
+    Without this extra, the metrics endpoint will not be available.
+
+For production observability (OTEL export, distributed tracing, PGVector-backed
+storage), see [Module 8](08-secrets-and-production.md). The
+[agent.yaml Reference](reference/agent-yaml.md) documents all `server:` options.
 
 ## What's next
 

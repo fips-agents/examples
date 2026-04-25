@@ -390,3 +390,59 @@ if self.needs_more_research(response):
     return StepResult.continue_()
 return StepResult.done(response.content)
 ```
+
+
+## Server HTTP API
+
+BaseAgent itself has no concept of sessions, traces, or metrics -- these are
+server-layer concerns handled by `OpenAIChatServer`. The server wraps your
+agent subclass and exposes an OpenAI-compatible HTTP surface with optional
+observability features. See the
+[agent.yaml reference](agent-yaml.md) for
+server configuration options.
+
+
+### Core Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/healthz` | GET | Health check. Returns `{"status": "ok"}`. |
+| `/readyz` | GET | Readiness check. Returns `{"status": "ready"}` when initialized, 503 otherwise. |
+| `/v1/agent-info` | GET | Agent metadata (name, description, version, model, tools, MCP servers). |
+| `/v1/chat/completions` | POST | OpenAI-compatible chat completions. Supports `stream: true/false`. Optional `session_id` field for session persistence. |
+
+
+### Session Endpoints
+
+Requires `server.sessions.enabled: true` in `agent.yaml`.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/sessions` | POST | Create a session. Body: `{"session_id": "my-session"}`. Returns 201. |
+| `/v1/sessions/{id}` | GET | Retrieve session with message history. |
+| `/v1/sessions/{id}` | DELETE | Delete a session. |
+
+Sessions are also auto-created on first use -- pass `session_id` on any
+`/v1/chat/completions` request and the server will create the session if it
+does not already exist. The `save()` method uses upsert semantics, so the
+explicit `POST /v1/sessions` endpoint is optional but recommended when you
+need to control the session ID or check for duplicates.
+
+
+### Trace Endpoints
+
+Requires `server.traces.enabled: true` in `agent.yaml`.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/traces` | GET | List traces (most recent first). Each entry includes `trace_id`, `started_at`, `duration_ms`, `span_count`, `tool_calls`, `model`, `session_id`, and `status`. |
+| `/v1/traces/{id}` | GET | Get a single trace with the full span tree. |
+
+
+### Metrics Endpoint
+
+Requires `server.metrics.enabled: true` in `agent.yaml`.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/metrics` | GET | Prometheus text format metrics. Counters: `agent_requests_total`, `agent_tool_call_total`, `agent_tokens_total` (labels: `model`, `direction`; values: `prompt`, `completion`). Histograms: `agent_request_duration_seconds`, `agent_model_call_duration_seconds`. |

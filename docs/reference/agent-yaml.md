@@ -17,11 +17,20 @@ Secrets to override defaults without editing the file.
 | `AGENT_NAME` | `agent.name` | `my-agent` | |
 | `MODEL_ENDPOINT` | `model.endpoint` | `http://llamastack:8321/v1` | OpenAI-compatible `/v1` URL |
 | `MODEL_NAME` | `model.name` | `meta-llama/Llama-3.3-70B-Instruct` | Model identifier for the endpoint |
+| `MODEL_PROVIDER` | `model.provider` | `openai` | LLM backend; non-openai values route through adapter sidecar |
 | `OPENAI_API_KEY` | *(SDK)* | -- | Required by the OpenAI SDK even for unauthenticated endpoints; set to any non-empty string |
 | `MAX_ITERATIONS` | `loop.max_iterations` | `100` | |
 | `LOG_LEVEL` | `logging.level` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
 | `HOST` | `server.host` | `0.0.0.0` | |
 | `PORT` | `server.port` | `8080` | |
+| `STORAGE_BACKEND` | `server.storage.backend` | *(null)* | `null`, `sqlite`, `postgres` |
+| `SQLITE_PATH` | `server.storage.sqlite_path` | `./agent.db` | Path to SQLite file |
+| `DATABASE_URL` | `server.storage.database_url` | -- | PostgreSQL connection string |
+| `SESSIONS_ENABLED` | `server.sessions.enabled` | `false` | Enable session persistence |
+| `TRACES_ENABLED` | `server.traces.enabled` | `false` | Enable trace collection |
+| `METRICS_ENABLED` | `server.metrics.enabled` | `false` | Enable Prometheus metrics at `GET /metrics` |
+| `OTEL_ENDPOINT` | `server.traces.otel_endpoint` | -- | OTLP gRPC endpoint for trace export |
+| `OTEL_SERVICE_NAME` | `server.traces.service_name` | `fipsagents` | Service name for OTEL spans |
 | `MEMORY_BACKEND` | `memory.backend` | *(auto-detect)* | `memoryhub`, `sqlite`, `pgvector`, `custom`, `null` |
 | `SECURITY_MODE` | `security.mode` | `enforce` | `enforce` or `observe` |
 | `TOOL_INSPECTION_ENABLED` | `security.tool_inspection.enabled` | `true` | |
@@ -53,6 +62,7 @@ OpenAI-compatible `/v1` URL -- vLLM, LlamaStack, llm-d, or any compatible API.
 |-------|------|---------|-------------|
 | `endpoint` | string | `http://llamastack:8321/v1` | OpenAI-compatible API base URL. |
 | `name` | string | `meta-llama/Llama-3.3-70B-Instruct` | Model identifier passed to the endpoint. |
+| `provider` | string | `openai` | LLM backend. Valid values: `openai` (any OpenAI-compatible endpoint -- default), `anthropic`, `bedrock`, `bedrock-converse`, `azure`, `openai-compatible`, `ollama`, `llama-cpp`, `vertex`. When provider is non-openai, the framework auto-rewrites the endpoint to the LLM adapter sidecar at `localhost:8081/v1`. |
 | `temperature` | float | `0.7` | Sampling temperature. |
 | `max_tokens` | int | `4096` | Maximum tokens per completion. |
 
@@ -60,6 +70,7 @@ OpenAI-compatible `/v1` URL -- vLLM, LlamaStack, llm-d, or any compatible API.
 model:
   endpoint: ${MODEL_ENDPOINT:-http://llamastack:8321/v1}
   name: ${MODEL_NAME:-meta-llama/Llama-3.3-70B-Instruct}
+  provider: ${MODEL_PROVIDER:-openai}
   temperature: 0.7
   max_tokens: 4096
 ```
@@ -190,6 +201,80 @@ server:
   port: ${PORT:-8080}
 ```
 
+### server.storage
+
+Shared storage backend for sessions and traces. When `backend` is `null`
+(the default), both features degrade to no-ops -- fully backward-compatible.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `backend` | string | `null` | `null`, `sqlite`, or `postgres`. When null, sessions and traces are no-ops. |
+| `sqlite_path` | string | `./agent.db` | Path to the SQLite file. Only used when `backend: sqlite`. |
+| `database_url` | string | -- | PostgreSQL connection string. Only used when `backend: postgres`. |
+
+```yaml
+server:
+  storage:
+    backend: ${STORAGE_BACKEND:-}
+    sqlite_path: ${SQLITE_PATH:-./agent.db}
+    # database_url: ${DATABASE_URL}
+```
+
+### server.sessions
+
+Session persistence. Requires a storage backend to be configured.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | Enable session persistence. |
+| `max_age_hours` | int | `168` | Sessions expire after this many hours. |
+
+```yaml
+server:
+  sessions:
+    enabled: ${SESSIONS_ENABLED:-false}
+    max_age_hours: 168
+```
+
+### server.traces
+
+Trace collection and export. Requires a storage backend (or OTEL exporter).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | Enable trace collection. |
+| `max_age_hours` | int | `168` | Traces expire after this many hours. |
+| `sampling_rate` | float | `1.0` | Fraction of requests to trace (0.0--1.0). |
+| `exporter` | string | *(none)* | `store` (persist to storage backend), `otel` (export via OTLP), or `null`. `otel` requires the `[otel]` extra. |
+| `otel_endpoint` | string | -- | OTLP gRPC endpoint (e.g. `http://otel-collector:4317`). Required when `exporter: otel`. |
+| `service_name` | string | `fipsagents` | Service name for OTEL spans. |
+
+```yaml
+server:
+  traces:
+    enabled: ${TRACES_ENABLED:-false}
+    max_age_hours: 168
+    sampling_rate: 1.0
+    # exporter: otel
+    # otel_endpoint: ${OTEL_ENDPOINT:-http://otel-collector:4317}
+    # service_name: ${OTEL_SERVICE_NAME:-fipsagents}
+```
+
+### server.metrics
+
+Prometheus metrics exposed at `GET /metrics`. Requires the `[metrics]` extra
+(`prometheus_client`).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | Enable Prometheus metrics at `GET /metrics`. |
+
+```yaml
+server:
+  metrics:
+    enabled: ${METRICS_ENABLED:-false}
+```
+
 ## memory
 
 Memory backend configuration. When `backend` is omitted, auto-detects by
@@ -309,6 +394,7 @@ agent:
 model:
   endpoint: ${MODEL_ENDPOINT:-http://llamastack:8321/v1}
   name: ${MODEL_NAME:-meta-llama/Llama-3.3-70B-Instruct}
+  provider: ${MODEL_PROVIDER:-openai}
   temperature: 0.7
   max_tokens: 4096
 
@@ -336,6 +422,21 @@ logging:
 server:
   host: ${HOST:-0.0.0.0}
   port: ${PORT:-8080}
+  storage:
+    backend: ${STORAGE_BACKEND:-}
+    sqlite_path: ${SQLITE_PATH:-./agent.db}
+    # database_url: ${DATABASE_URL}
+  sessions:
+    enabled: ${SESSIONS_ENABLED:-false}
+    max_age_hours: 168
+  traces:
+    enabled: ${TRACES_ENABLED:-false}
+    sampling_rate: 1.0
+    # exporter: otel
+    # otel_endpoint: ${OTEL_ENDPOINT:-http://otel-collector:4317}
+    # service_name: ${OTEL_SERVICE_NAME:-fipsagents}
+  metrics:
+    enabled: ${METRICS_ENABLED:-false}
 
 memory:
   backend: ${MEMORY_BACKEND:-}
