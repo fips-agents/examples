@@ -42,7 +42,7 @@ Browser → Chat UI → Gateway → Agent → MCP Server (calculus tools)
 | [5. Gateway and UI](05-gateway-and-ui.md) | Deploy the full stack, test end-to-end |
 | [6. Code Execution Sandbox](06-code-sandbox.md) | Deploy a sandbox, give the agent code execution |
 | [7. Extend with AI](07-extend-with-ai.md) | Use AI-assisted slash commands to add capabilities |
-| [8. Production Hardening](08-secrets-and-production.md) | Secrets, FIPS, scaling, observability (metrics, traces, sessions) |
+| [8. Production Hardening](08-secrets-and-production.md) | Secrets, FIPS, scaling, observability (metrics, traces, sessions, user feedback) |
 
 ## Reference
 
