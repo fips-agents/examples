@@ -470,12 +470,13 @@ helm upgrade my-agent chart/ \
 
 #### REST endpoints
 
-The server exposes three feedback endpoints:
+The server exposes four feedback endpoints:
 
 | Path | Method | Purpose |
 |------|--------|---------|
 | `/v1/feedback` | POST | Submit a rating (1 = thumbs-up, -1 = thumbs-down) |
 | `/v1/feedback` | GET | Query records, filterable by `trace_id`, `session_id`, time window |
+| `/v1/feedback/{feedback_id}` | PATCH | Edit an existing record in place — change the rating, revise the comment |
 | `/v1/feedback/stats` | GET | Aggregated counts grouped by time window (`hour` / `day` / `week`) |
 
 A minimal POST looks like this:
@@ -490,6 +491,20 @@ curl -X POST http://my-agent:8080/v1/feedback \
 identifier so feedback works even when tracing is disabled or sampled
 out. Records keyed to a real trace can be joined to the trace store;
 orphan records are still useful as raw rating data.
+
+When a user changes their mind on an already-rated message, send a PATCH
+with the new fields rather than posting again -- the record updates in
+place, no duplicate row is created. PATCH bodies are partial: omitted
+fields stay as they were.
+
+```bash
+# Capture the feedback_id from the original POST response, then:
+curl -X PATCH http://my-agent:8080/v1/feedback/fb_abc123 \
+  -H 'Content-Type: application/json' \
+  -d '{"rating":-1,"comment":"on second look, this was wrong"}'
+```
+
+Returns 200 with the full updated record, or 404 if the id is unknown.
 
 #### Where the trace_id comes from
 
