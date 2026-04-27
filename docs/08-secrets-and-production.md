@@ -434,6 +434,139 @@ header) -- extracting it from incoming requests and injecting it into
 outgoing RemoteNode calls. This links spans across multi-agent workflows
 into a single distributed trace without any application-level code.
 
+### User feedback collection
+
+Metrics tell you the agent is fast. Traces tell you what it did. Neither
+tells you whether users were happy with the answer. Feedback collection
+closes that gap by storing thumbs-up / thumbs-down ratings, optional
+comments, and corrections -- joined to the trace that produced each
+response so you can replay the conversation behind a bad rating.
+
+This data is the raw material for two downstream pipelines: dashboards
+that surface degradations early, and labelled datasets for fine-tuning
+or RLHF.
+
+Enable feedback alongside tracing:
+
+```yaml
+server:
+  storage:
+    backend: sqlite             # or: postgres
+  traces:
+    enabled: true               # so feedback can join to a trace
+  feedback:
+    enabled: true
+    max_age_hours: 720          # keep 30 days
+```
+
+Override via Helm or env vars:
+
+```bash
+helm upgrade my-agent chart/ \
+  --set config.STORAGE_BACKEND=sqlite \
+  --set config.TRACES_ENABLED=true \
+  --set config.FEEDBACK_ENABLED=true
+```
+
+#### REST endpoints
+
+The server exposes four feedback endpoints:
+
+| Path | Method | Purpose |
+|------|--------|---------|
+| `/v1/feedback` | POST | Submit a rating (1 = thumbs-up, -1 = thumbs-down) |
+| `/v1/feedback` | GET | Query records, filterable by `trace_id`, `session_id`, time window |
+| `/v1/feedback/{feedback_id}` | PATCH | Edit an existing record in place — change the rating, revise the comment |
+| `/v1/feedback/stats` | GET | Aggregated counts grouped by time window (`hour` / `day` / `week`) |
+
+A minimal POST looks like this:
+
+```bash
+curl -X POST http://my-agent:8080/v1/feedback \
+  -H 'Content-Type: application/json' \
+  -d '{"trace_id":"trace_abc123","rating":1,"comment":"clear explanation"}'
+```
+
+`trace_id` is optional -- if omitted, the server synthesises a stand-alone
+identifier so feedback works even when tracing is disabled or sampled
+out. Records keyed to a real trace can be joined to the trace store;
+orphan records are still useful as raw rating data.
+
+When a user changes their mind on an already-rated message, send a PATCH
+with the new fields rather than posting again -- the record updates in
+place, no duplicate row is created. PATCH bodies are partial: omitted
+fields stay as they were.
+
+```bash
+# Capture the feedback_id from the original POST response, then:
+curl -X PATCH http://my-agent:8080/v1/feedback/fb_abc123 \
+  -H 'Content-Type: application/json' \
+  -d '{"rating":-1,"comment":"on second look, this was wrong"}'
+```
+
+Returns 200 with the full updated record, or 404 if the id is unknown.
+
+#### Where the trace_id comes from
+
+Every chat completion response now carries an `X-Trace-Id` header (sync
+and streaming) and a top-level `trace_id` field on the final SSE usage
+chunk. UI clients capture either value and attach it to subsequent
+feedback POSTs. The gateway preserves the value verbatim:
+
+```
+Browser  ──POST /v1/feedback──▶  UI proxy  ──▶  Gateway  ──▶  Agent
+                                                  └─ forwards Authorization,
+                                                     X-User-ID for attribution
+```
+
+#### UI integration
+
+The chat UI scaffolded by `fips-agents create ui` includes thumbs-up /
+thumbs-down icons that hover-reveal on completed assistant messages.
+Thumbs-up records a positive rating immediately. Thumbs-down opens a
+small modal asking for a category (Inaccurate / Not helpful / Harmful /
+Too long / Other) plus an optional free-text comment, then POSTs to
+`/v1/feedback` via the gateway. Categories are encoded as a bracketed
+prefix on the comment field (`[Inaccurate] verbose detail`) so they
+round-trip through the existing schema and remain recoverable from
+queries.
+
+#### Querying feedback
+
+List the most recent records for a session:
+
+```bash
+curl 'http://my-agent:8080/v1/feedback?session_id=demo-1&limit=20' | jq
+```
+
+Get aggregated stats for the last 7 days, bucketed by day:
+
+```bash
+curl 'http://my-agent:8080/v1/feedback/stats?window=day&since=2026-04-19T00:00:00Z' | jq
+```
+
+Each stats row contains `window_start`, `window_end`, `agent_type`,
+`thumbs_up`, `thumbs_down`, and `total`. Pipe these to your analytics
+stack -- a Grafana panel keyed off the SQLite or Postgres backend is
+typical.
+
+#### Lab exercise
+
+Enable feedback on the calculus agent with sqlite storage:
+
+1. Set `server.feedback.enabled: true` and `server.storage.backend: sqlite`
+   in `agent.yaml`.
+2. Add `fipsagents[feedback]` to the `dependencies` list in
+   `pyproject.toml` (or run `pip install 'fipsagents[feedback]'` in your
+   venv).
+3. Redeploy: `make deploy PROJECT=calculus-agent`.
+4. Open the chat UI, run several conversations, click thumbs-up on good
+   answers and thumbs-down (with a category) on bad ones.
+5. Query `/v1/feedback/stats?window=hour` to see your ratings aggregated.
+6. Pick a low-rated trace and fetch it: `GET /v1/traces/{trace_id}` -- the
+   full conversation, tool calls, and timings are recoverable. That is
+   your first labelled training example.
+
 ## What's next
 
 You've built and hardened a complete AI agent system across eight modules:
@@ -445,7 +578,7 @@ You've built and hardened a complete AI agent system across eight modules:
 5. **Deployed** a gateway and chat UI for browser-based interaction
 6. **Added** a code execution sandbox for numerical computation
 7. **Extended** the agent with AI-assisted slash commands
-8. **Hardened** the stack with secrets, authentication, security policy, monitoring, and observability
+8. **Hardened** the stack with secrets, authentication, security policy, monitoring, observability, and user feedback collection
 
 The `calculus-agent/` and `calculus-helper/` directories in this repository
 serve as complete reference implementations. Use them as starting points for

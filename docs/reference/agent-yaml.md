@@ -29,6 +29,7 @@ Secrets to override defaults without editing the file.
 | `SESSIONS_ENABLED` | `server.sessions.enabled` | `false` | Enable session persistence |
 | `TRACES_ENABLED` | `server.traces.enabled` | `false` | Enable trace collection |
 | `METRICS_ENABLED` | `server.metrics.enabled` | `false` | Enable Prometheus metrics at `GET /metrics` |
+| `FEEDBACK_ENABLED` | `server.feedback.enabled` | `false` | Enable user feedback collection at `POST/GET /v1/feedback` |
 | `OTEL_ENDPOINT` | `server.traces.otel_endpoint` | -- | OTLP gRPC endpoint for trace export |
 | `OTEL_SERVICE_NAME` | `server.traces.service_name` | `fipsagents` | Service name for OTEL spans |
 | `MEMORY_BACKEND` | `memory.backend` | *(auto-detect)* | `memoryhub`, `sqlite`, `pgvector`, `custom`, `null` |
@@ -274,6 +275,28 @@ server:
   metrics:
     enabled: ${METRICS_ENABLED:-false}
 ```
+
+### server.feedback
+
+User feedback collection at `POST /v1/feedback`, `GET /v1/feedback`, and
+`GET /v1/feedback/stats`. Requires a storage backend for persistence;
+without one, POSTs are accepted and discarded.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | Enable feedback collection endpoints. |
+| `max_age_hours` | int | `720` | Records expire after this many hours (default: 30 days). |
+
+```yaml
+server:
+  feedback:
+    enabled: ${FEEDBACK_ENABLED:-false}
+    max_age_hours: 720
+```
+
+Records carry `rating` (`1` or `-1`), `trace_id` (for joining to trace
+data), optional `comment` and `correction`, plus `model_id`, `latency_ms`,
+`turn_index`, and `agent_type` for slicing in the stats endpoint.
 
 ## memory
 
