@@ -41,6 +41,7 @@ nav:
     - "6. Code Execution Sandbox": 06-code-sandbox.md
     - "7. Extend with AI": 07-extend-with-ai.md
     - "8. Production Hardening": 08-secrets-and-production.md
+    - "9. File Uploads": 09-file-uploads.md
   - Reference:
     - "agent.yaml": reference/agent-yaml.md
     - "Helm Chart": reference/helm-chart.md

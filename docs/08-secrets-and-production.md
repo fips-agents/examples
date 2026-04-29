@@ -587,3 +587,8 @@ your own agents.
 For deeper dives into specific topics, see the [Reference](index.md#reference)
 pages: agent.yaml configuration, Helm chart anatomy, BaseAgent API, and MCP
 protocol details.
+
+When you're ready to teach the agent to read user-supplied documents,
+[Module 9](09-file-uploads.md) covers the file-upload track end-to-end:
+drag-drop UI, streaming gateway proxy, Docling parsing, and ClamAV virus
+scanning.

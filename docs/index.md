@@ -43,6 +43,7 @@ Browser → Chat UI → Gateway → Agent → MCP Server (calculus tools)
 | [6. Code Execution Sandbox](06-code-sandbox.md) | Deploy a sandbox, give the agent code execution |
 | [7. Extend with AI](07-extend-with-ai.md) | Use AI-assisted slash commands to add capabilities |
 | [8. Production Hardening](08-secrets-and-production.md) | Secrets, FIPS, scaling, observability (metrics, traces, sessions, user feedback) |
+| [9. File Uploads](09-file-uploads.md) | Drag-drop uploads, Docling parsing, MIME validation, ClamAV scanning |
 
 ## Reference
 
