@@ -1,19 +1,28 @@
-# Building AI Agents for OpenShift
+# Building AI Agents on Red Hat AI
 
 A hands-on tutorial that takes you from zero to a deployed AI agent system
-on Red Hat OpenShift, using the [fips-agents](https://github.com/fips-agents)
+on **Red Hat AI**, using the [fips-agents](https://github.com/fips-agents)
 framework.
 
 This tutorial was last verified against **fipsagents v0.11.0** (April 2026).
 
+## What is Red Hat AI?
+
+Red Hat AI is Red Hat's portfolio for building and running AI on the hybrid
+cloud. In this tutorial, "Red Hat AI" specifically means **OpenShift AI
+running on OpenShift**: OpenShift is the underlying Kubernetes platform,
+OpenShift AI is the MLOps layer that manages model serving (via KServe and
+vLLM), and your agents run as ordinary OpenShift workloads alongside.
+
 ## What you'll build
 
-By the end of this tutorial, you'll have a complete system running on OpenShift:
+By the end of this tutorial, you'll have a complete system running on Red
+Hat AI:
 
 ```
 Browser → Chat UI → Gateway → Agent → MCP Server (calculus tools)
                                   ↓
-                              LLM (vLLM)
+                              vLLM (Granite 3.3 8B)
 ```
 
 - A **Calculus Helper agent** that solves math problems using remote tools
@@ -23,13 +32,19 @@ Browser → Chat UI → Gateway → Agent → MCP Server (calculus tools)
 
 ## Prerequisites
 
-!!! info "What you need"
-    - Python 3.11 or later
-    - Access to an OpenShift cluster with a deployed LLM (vLLM or LlamaStack)
-    - `fips-agents` CLI: `pipx install fips-agents-cli`
-    - `oc` CLI: [Install from Red Hat](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/)
-    - `helm` CLI: [Install from Helm](https://helm.sh/docs/intro/install/)
-    - A terminal and a text editor
+The full prerequisite checklist — cluster, OpenShift AI, LLM serving, CLI
+tools, and registry access — is its own module:
+
+→ **[0. Before You Begin](00-prerequisites.md)**
+
+!!! tip "Two paths"
+    The tutorial supports two paths. **Path A** is the full experience: an
+    OpenShift cluster with OpenShift AI and a GPU serving Granite 3.3 8B
+    via vLLM. **Path B** is for students without GPU access (Developer
+    Sandbox, CRC, or any cluster without a GPU node) — you supply an
+    external OpenAI-compatible model URL and deploy everything else on
+    your cluster. Both paths are documented in
+    [Before You Begin](00-prerequisites.md).
 
 ## Modules
 

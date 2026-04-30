@@ -1,5 +1,5 @@
-site_name: "Building AI Agents for OpenShift"
-site_description: "A hands-on tutorial for building, deploying, and extending AI agents using the fips-agents framework"
+site_name: "Building AI Agents on Red Hat AI"
+site_description: "A hands-on tutorial for building, deploying, and extending AI agents on Red Hat AI using the fips-agents framework"
 site_url: https://fips-agents.github.io/examples/
 repo_url: https://github.com/fips-agents/examples
 repo_name: fips-agents/examples
@@ -33,6 +33,7 @@ theme:
 nav:
   - Tutorial:
     - Overview: index.md
+    - "0. Before You Begin": 00-prerequisites.md
     - "1. Scaffold Your Agent": 01-scaffold-agent.md
     - "2. Configure and Deploy": 02-configure-and-deploy.md
     - "3. Build an MCP Server": 03-build-mcp-server.md
@@ -42,6 +43,12 @@ nav:
     - "7. Extend with AI": 07-extend-with-ai.md
     - "8. Production Hardening": 08-secrets-and-production.md
     - "9. File Uploads": 09-file-uploads.md
+  - Setup Guides:
+    - "Choosing a Cluster": guides/cluster-options.md
+    - "Install OpenShift AI": guides/install-openshift-ai.md
+    - "Serve an LLM": guides/serve-an-llm.md
+    - "Install CLI Tools": guides/install-cli-tools.md
+    - "Registry Setup": guides/registry-setup.md
   - Reference:
     - "agent.yaml": reference/agent-yaml.md
     - "Helm Chart": reference/helm-chart.md
