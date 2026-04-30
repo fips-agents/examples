@@ -4,6 +4,11 @@ We start by creating an agent project using the `fips-agents` CLI. By the end
 of this module, you'll understand every file in the project and have the agent
 running locally.
 
+!!! info "Have you finished the prerequisites?"
+    Make sure you've worked through [0. Before You Begin](00-prerequisites.md)
+    — you'll need a cluster, OpenShift AI, an LLM endpoint, the CLI tools,
+    and registry access before Module 2.
+
 ## Create the project
 
 The `fips-agents create agent` command scaffolds a complete project from the

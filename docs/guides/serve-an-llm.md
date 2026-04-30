@@ -1,9 +1,10 @@
 # Serve an LLM
 
 The agent in this tutorial talks to an OpenAI-compatible LLM endpoint. The
-reference model is **`ibm-granite/granite-3.3-8b-instruct`** served via
-**vLLM**. Granite 3.3 8B is small enough to fit on a single 24 GB GPU at
-fp16 and capable enough to drive multi-turn tool calls reliably.
+reference model is **`google/gemma-4-9b-it`** (Gemma 4 9B Instruct) served
+via **vLLM** — this is the model the tutorial was end-to-end verified
+against. Gemma 4 9B fits on a single 24 GB GPU at fp16 and is capable
+enough to drive multi-turn tool calls.
 
 This guide covers two paths:
 
@@ -14,8 +15,8 @@ Both paths produce the same two values that the rest of the tutorial reads:
 
 | Variable | Example |
 |----------|---------|
-| `MODEL_ENDPOINT` | `https://granite-predictor.calculus-mcp.svc.cluster.local/v1` or `https://api.example.com/v1` |
-| `MODEL_NAME` | `ibm-granite/granite-3.3-8b-instruct` |
+| `MODEL_ENDPOINT` | `https://gemma-predictor.calculus-mcp.svc.cluster.local/v1` or `https://api.example.com/v1` |
+| `MODEL_NAME` | `google/gemma-4-9b-it` |
 
 ## Path A: Serve on-cluster with vLLM
 
@@ -38,8 +39,8 @@ KServe storage URI instead — see the [KServe storage docs][kserve-storage].
 oc new-project model-serving
 ```
 
-If pulling from Hugging Face, create a secret with your HF token (Granite
-models are gated):
+If pulling from Hugging Face, create a secret with your HF token (Gemma
+models are gated and require accepting Google's license on the model page):
 
 ```bash
 oc create secret generic hf-token \
@@ -64,9 +65,9 @@ spec:
       image: quay.io/modh/vllm:latest
       command: ["python", "-m", "vllm.entrypoints.openai.api_server"]
       args:
-        - "--model=ibm-granite/granite-3.3-8b-instruct"
+        - "--model=google/gemma-4-9b-it"
         - "--port=8080"
-        - "--served-model-name=ibm-granite/granite-3.3-8b-instruct"
+        - "--served-model-name=google/gemma-4-9b-it"
         - "--max-model-len=8192"
       env:
         - name: HF_TOKEN
@@ -94,7 +95,7 @@ spec:
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
-  name: granite
+  name: gemma
   namespace: model-serving
 spec:
   predictor:
@@ -115,16 +116,16 @@ The first startup pulls the model weights and can take 10–20 minutes.
 Watch progress:
 
 ```bash
-oc logs -n model-serving -l serving.kserve.io/inferenceservice=granite -f
+oc logs -n model-serving -l serving.kserve.io/inferenceservice=gemma -f
 ```
 
 ### 4. Get the endpoint URL
 
 ```bash
-URL=$(oc get inferenceservice granite -n model-serving \
+URL=$(oc get inferenceservice gemma -n model-serving \
   -o jsonpath='{.status.url}')
 echo "$URL"
-# https://granite-model-serving.apps.<cluster-domain>
+# https://gemma-model-serving.apps.<cluster-domain>
 ```
 
 Smoke test:
@@ -134,7 +135,7 @@ curl -s "$URL/v1/models" | jq
 curl -s "$URL/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "ibm-granite/granite-3.3-8b-instruct",
+    "model": "google/gemma-4-9b-it",
     "messages": [{"role": "user", "content": "Hello"}]
   }' | jq
 ```
@@ -143,7 +144,7 @@ curl -s "$URL/v1/chat/completions" \
 
 ```bash
 export MODEL_ENDPOINT="${URL}/v1"
-export MODEL_NAME="ibm-granite/granite-3.3-8b-instruct"
+export MODEL_NAME="google/gemma-4-9b-it"
 ```
 
 You're ready for Module 1.
@@ -190,12 +191,14 @@ The rest of the tutorial works identically — only the LLM lives elsewhere.
 
 ## Picking a different model
 
-The tutorial verifies against Granite 3.3 8B Instruct, but any
-instruction-tuned model with reliable tool-calling support works. Larger
-Granite, Llama 3.3 70B Instruct, and Mistral Large all work well if you
-have the GPU budget. Smaller models (under ~7B params) may struggle with
-the tool-call JSON for some calculus tools — see `NEXT_SESSION.md` for
-notes on observed model behavior.
+The tutorial verifies against Gemma 4 9B Instruct, but any
+instruction-tuned model with reliable tool-calling support works.
+Granite 3.3 8B, Llama 3.3 70B Instruct, and Mistral Large all work well if
+you have the GPU budget. Gemma 4 9B occasionally returns empty final
+content after tool calls and sometimes constructs malformed JSON for the
+`differentiate` tool's `variables` array argument; a more capable model
+will handle those cases more reliably. See `NEXT_SESSION.md` for the
+observed behavior notes.
 
 ## Next
 
