@@ -3,16 +3,9 @@
 The agent in this tutorial talks to an OpenAI-compatible LLM endpoint. The
 reference model is **`ibm-granite/granite-3.3-8b-instruct`** served via
 **vLLM**. Granite 3.3 8B is small enough to fit on a single 24 GB GPU at
-fp16, capable enough to drive multi-turn tool calls reliably, and
-**FIPS-compatible on vLLM today** — which matters for this tutorial,
-since the framework is `fips-agents` and many target deployments run on
-FIPS-enabled clusters.
-
-!!! note "Why not Gemma?"
-    Gemma 4 also runs well for this tutorial functionally, but vLLM
-    support for Gemma 4 in FIPS mode requires patches that have not yet
-    landed upstream. Until those land, Granite is the safer default for
-    anyone who might end up on a FIPS cluster.
+fp16, capable enough to drive multi-turn tool calls reliably, and works
+well in FIPS mode — useful since this tutorial targets the `fips-agents`
+framework.
 
 This guide covers two paths:
 
@@ -199,14 +192,11 @@ The rest of the tutorial works identically — only the LLM lives elsewhere.
 
 ## Picking a different model
 
-The tutorial verifies against Granite 3.3 8B Instruct, but any
+The tutorial uses Granite 3.3 8B Instruct as its reference, but any
 instruction-tuned model with reliable tool-calling support works.
 Larger Granite, Llama 3.3 70B Instruct, and Mistral Large all work well
-if you have the GPU budget. Gemma 4 also runs the tutorial functionally
-but is **not yet FIPS-compatible on vLLM** (patches pending upstream),
-so it's not the documented default for a `fips-agents` tutorial.
-Smaller models (under ~7B params) may struggle with tool-call JSON for
-some calculus tools.
+if you have the GPU budget. Smaller models (under ~7B params) may
+struggle with tool-call JSON for some calculus tools.
 
 ## Next
 

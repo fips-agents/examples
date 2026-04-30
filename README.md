@@ -19,7 +19,7 @@ The full checklist (cluster, OpenShift AI, LLM serving, CLI tools, registry) liv
 
 The tutorial supports two paths:
 
-- **Path A** — OpenShift cluster with OpenShift AI and a GPU serving Granite 3.3 8B Instruct on vLLM (the full experience; FIPS-compatible).
+- **Path A** — OpenShift cluster with OpenShift AI and a GPU serving Granite 3.3 8B Instruct on vLLM (the full experience).
 - **Path B** — no cluster GPU? Use the [Developer Sandbox](https://developers.redhat.com/developer-sandbox) or any cluster, and point the agent at an external OpenAI-compatible model URL.
 
 ## Example projects

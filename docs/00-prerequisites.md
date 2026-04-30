@@ -7,7 +7,7 @@ work through this checklist. Each item links to a setup guide if you need help.
     **Path A — Full cluster.** You have an OpenShift cluster with OpenShift AI
     installed and at least one GPU available. You will serve **Granite 3.3 8B
     Instruct** on-cluster with vLLM and route the agent to it. This is the
-    intended experience and is FIPS-compatible.
+    intended experience.
 
     **Path B — External model.** You don't have a cluster, or your cluster has
     no GPUs (e.g., the [Red Hat Developer Sandbox][sandbox]). You will still
@@ -45,9 +45,8 @@ provisioned (with KServe enabled for model serving).
 
 ### 3. An LLM (Granite 3.3 8B Instruct)
 
-The tutorial is verified against **`ibm-granite/granite-3.3-8b-instruct`**
-served via vLLM. Granite 3.3 8B is FIPS-compatible on vLLM today, which
-matters because this tutorial uses the `fips-agents` framework. You need:
+The tutorial uses **`ibm-granite/granite-3.3-8b-instruct`** served via
+vLLM. You need:
 
 - An OpenAI-compatible endpoint URL (`MODEL_ENDPOINT`)
 - The model identifier (`MODEL_NAME`)
