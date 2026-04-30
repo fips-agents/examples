@@ -22,7 +22,7 @@ OpenAI-compatible endpoint via `MODEL_ENDPOINT`.
 
 Install OpenShift on bare metal, VMware, or any supported platform. You'll
 need at least one worker node with a GPU (NVIDIA A10, L4, A100, H100, or
-similar — ~24 GB VRAM minimum for Gemma 4 9B at fp16).
+similar — ~24 GB VRAM minimum for Granite 3.3 8B at fp16).
 
 This is the most flexible option but also the most work.
 

@@ -1,10 +1,18 @@
 # Serve an LLM
 
 The agent in this tutorial talks to an OpenAI-compatible LLM endpoint. The
-reference model is **`google/gemma-4-9b-it`** (Gemma 4 9B Instruct) served
-via **vLLM** — this is the model the tutorial was end-to-end verified
-against. Gemma 4 9B fits on a single 24 GB GPU at fp16 and is capable
-enough to drive multi-turn tool calls.
+reference model is **`ibm-granite/granite-3.3-8b-instruct`** served via
+**vLLM**. Granite 3.3 8B is small enough to fit on a single 24 GB GPU at
+fp16, capable enough to drive multi-turn tool calls reliably, and
+**FIPS-compatible on vLLM today** — which matters for this tutorial,
+since the framework is `fips-agents` and many target deployments run on
+FIPS-enabled clusters.
+
+!!! note "Why not Gemma?"
+    Gemma 4 also runs well for this tutorial functionally, but vLLM
+    support for Gemma 4 in FIPS mode requires patches that have not yet
+    landed upstream. Until those land, Granite is the safer default for
+    anyone who might end up on a FIPS cluster.
 
 This guide covers two paths:
 
@@ -15,8 +23,8 @@ Both paths produce the same two values that the rest of the tutorial reads:
 
 | Variable | Example |
 |----------|---------|
-| `MODEL_ENDPOINT` | `https://gemma-predictor.calculus-mcp.svc.cluster.local/v1` or `https://api.example.com/v1` |
-| `MODEL_NAME` | `google/gemma-4-9b-it` |
+| `MODEL_ENDPOINT` | `https://granite-predictor.calculus-mcp.svc.cluster.local/v1` or `https://api.example.com/v1` |
+| `MODEL_NAME` | `ibm-granite/granite-3.3-8b-instruct` |
 
 ## Path A: Serve on-cluster with vLLM
 
@@ -39,8 +47,8 @@ KServe storage URI instead — see the [KServe storage docs][kserve-storage].
 oc new-project model-serving
 ```
 
-If pulling from Hugging Face, create a secret with your HF token (Gemma
-models are gated and require accepting Google's license on the model page):
+If pulling from Hugging Face, create a secret with your HF token (Granite
+models are gated):
 
 ```bash
 oc create secret generic hf-token \
@@ -65,9 +73,9 @@ spec:
       image: quay.io/modh/vllm:latest
       command: ["python", "-m", "vllm.entrypoints.openai.api_server"]
       args:
-        - "--model=google/gemma-4-9b-it"
+        - "--model=ibm-granite/granite-3.3-8b-instruct"
         - "--port=8080"
-        - "--served-model-name=google/gemma-4-9b-it"
+        - "--served-model-name=ibm-granite/granite-3.3-8b-instruct"
         - "--max-model-len=8192"
       env:
         - name: HF_TOKEN
@@ -95,7 +103,7 @@ spec:
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
-  name: gemma
+  name: granite
   namespace: model-serving
 spec:
   predictor:
@@ -116,16 +124,16 @@ The first startup pulls the model weights and can take 10–20 minutes.
 Watch progress:
 
 ```bash
-oc logs -n model-serving -l serving.kserve.io/inferenceservice=gemma -f
+oc logs -n model-serving -l serving.kserve.io/inferenceservice=granite -f
 ```
 
 ### 4. Get the endpoint URL
 
 ```bash
-URL=$(oc get inferenceservice gemma -n model-serving \
+URL=$(oc get inferenceservice granite -n model-serving \
   -o jsonpath='{.status.url}')
 echo "$URL"
-# https://gemma-model-serving.apps.<cluster-domain>
+# https://granite-model-serving.apps.<cluster-domain>
 ```
 
 Smoke test:
@@ -135,7 +143,7 @@ curl -s "$URL/v1/models" | jq
 curl -s "$URL/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "google/gemma-4-9b-it",
+    "model": "ibm-granite/granite-3.3-8b-instruct",
     "messages": [{"role": "user", "content": "Hello"}]
   }' | jq
 ```
@@ -144,7 +152,7 @@ curl -s "$URL/v1/chat/completions" \
 
 ```bash
 export MODEL_ENDPOINT="${URL}/v1"
-export MODEL_NAME="google/gemma-4-9b-it"
+export MODEL_NAME="ibm-granite/granite-3.3-8b-instruct"
 ```
 
 You're ready for Module 1.
@@ -191,14 +199,14 @@ The rest of the tutorial works identically — only the LLM lives elsewhere.
 
 ## Picking a different model
 
-The tutorial verifies against Gemma 4 9B Instruct, but any
+The tutorial verifies against Granite 3.3 8B Instruct, but any
 instruction-tuned model with reliable tool-calling support works.
-Granite 3.3 8B, Llama 3.3 70B Instruct, and Mistral Large all work well if
-you have the GPU budget. Gemma 4 9B occasionally returns empty final
-content after tool calls and sometimes constructs malformed JSON for the
-`differentiate` tool's `variables` array argument; a more capable model
-will handle those cases more reliably. See `NEXT_SESSION.md` for the
-observed behavior notes.
+Larger Granite, Llama 3.3 70B Instruct, and Mistral Large all work well
+if you have the GPU budget. Gemma 4 also runs the tutorial functionally
+but is **not yet FIPS-compatible on vLLM** (patches pending upstream),
+so it's not the documented default for a `fips-agents` tutorial.
+Smaller models (under ~7B params) may struggle with tool-call JSON for
+some calculus tools.
 
 ## Next
 

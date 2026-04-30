@@ -22,7 +22,7 @@ Hat AI:
 ```
 Browser → Chat UI → Gateway → Agent → MCP Server (calculus tools)
                                   ↓
-                              vLLM (Gemma 4 9B)
+                              vLLM (Granite 3.3 8B)
 ```
 
 - A **Calculus Helper agent** that solves math problems using remote tools
@@ -39,7 +39,7 @@ tools, and registry access — is its own module:
 
 !!! tip "Two paths"
     The tutorial supports two paths. **Path A** is the full experience: an
-    OpenShift cluster with OpenShift AI and a GPU serving Gemma 4 9B
+    OpenShift cluster with OpenShift AI and a GPU serving Granite 3.3 8B
     via vLLM. **Path B** is for students without GPU access (Developer
     Sandbox, CRC, or any cluster without a GPU node) — you supply an
     external OpenAI-compatible model URL and deploy everything else on
