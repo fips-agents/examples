@@ -259,6 +259,13 @@ helm upgrade --install calculus-ui chart/ \
     gateway directly -- it sends requests to the UI origin, and the Go server
     forwards them.
 
+!!! warning "Don't paste the gateway's HTTPS Route URL here"
+    A common mistake is to set `API_URL` to the gateway's external route
+    (`https://calculus-gateway-...apps.example.com`). That URL terminates TLS
+    at the OpenShift router and invites CORS / TLS-trust failures from inside
+    the pod, even though it appears to work from your laptop. `API_URL` must
+    be the in-cluster Service URL (`http://calculus-gateway:8080`).
+
 Get the UI route and open it in your browser:
 
 ```bash

@@ -326,7 +326,15 @@ subsequent requests. Capture it:
 
 ```bash
 SESSION=$(grep -i mcp-session-id /tmp/mcp-headers.txt | tr -d '\r' | awk '{print $2}')
+echo "SESSION=$SESSION"
 ```
+
+The `echo` should print a non-empty UUID-like string. If `SESSION` is empty,
+the `initialize` call did not return a session header -- inspect
+`/tmp/mcp-headers.txt` directly to see the raw response (most often the route
+returned an HTML error page, or the server rejected the request before
+assigning a session). Don't continue until `SESSION` is populated; every
+subsequent request will fail with a 4xx otherwise.
 
 Responses arrive as SSE events, prefixed with `event: message\ndata: ...`.
 Most terminals display the JSON payload inline.

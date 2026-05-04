@@ -210,9 +210,12 @@ make redeploy PROJECT=calculus-agent
 Verify the agent discovered the MCP tools:
 
 ```bash
-ROUTE=$(oc get route calculus-agent -n calculus-agent -o jsonpath='{.spec.host}')
+# Note: this is the *agent* route in calculus-agent. The MCP server's route
+# from Module 3 lives in calculus-mcp -- if your shell still has $ROUTE from
+# that session, re-export it here so you don't curl the wrong service.
+AGENT_ROUTE=$(oc get route calculus-agent -n calculus-agent -o jsonpath='{.spec.host}')
 
-curl -sk "https://$ROUTE/v1/agent-info" | python -m json.tool
+curl -sk "https://$AGENT_ROUTE/v1/agent-info" | python -m json.tool
 ```
 
 You should see the MCP tools in the response:
@@ -232,7 +235,7 @@ You should see the MCP tools in the response:
 Now send a calculus problem and trace the flow:
 
 ```bash
-curl -sk "https://$ROUTE/v1/chat/completions" \
+curl -sk "https://$AGENT_ROUTE/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [{"role": "user", "content": "Integrate x^2 dx"}]
@@ -271,12 +274,12 @@ Try a few more problems to exercise different tools:
 
 ```bash
 # Differentiation
-curl -sk "https://$ROUTE/v1/chat/completions" \
+curl -sk "https://$AGENT_ROUTE/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{"messages": [{"role": "user", "content": "Find the derivative of sin(x)*cos(x)"}]}'
 
 # Definite integral with infinite bound
-curl -sk "https://$ROUTE/v1/chat/completions" \
+curl -sk "https://$AGENT_ROUTE/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{"messages": [{"role": "user", "content": "Evaluate the integral of e^(-x^2) from 0 to infinity"}]}'
 ```

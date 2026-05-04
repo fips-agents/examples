@@ -38,6 +38,16 @@ Open Claude Code in the `calculus-helper` directory and run:
 /plan-tools
 ```
 
+!!! warning "Run this from inside `calculus-helper/`, not `calculus-agent/`"
+    These slash commands ship in `calculus-helper/.claude/commands/` and only
+    exist when Claude Code is launched with `calculus-helper/` as its working
+    directory. If you run `/plan-tools` from `calculus-agent/`, Claude Code
+    will report "command not found" or, worse, scaffold a tool into the wrong
+    project. If the command isn't recognized, double-check `pwd` and confirm
+    `.claude/commands/plan-tools.md` exists in the current directory --
+    fips-agents-scaffolded MCP servers ship with these commands, but a
+    hand-rolled clone won't.
+
 The command does three things:
 
 1. Reads Anthropic's [tool design article](https://www.anthropic.com/engineering/writing-tools-for-agents) to ground itself in best practices

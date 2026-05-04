@@ -18,7 +18,19 @@ Red Hat UBI base images are FIPS-capable out of the box. When the host kernel
 has `fips=1` set, UBI's OpenSSL automatically restricts itself to
 FIPS-validated algorithms. No application-level configuration is needed.
 
-To verify FIPS mode is active in a running pod:
+To verify FIPS mode is active in a running pod, first confirm the pod is up:
+
+```bash
+oc get pods -n calculus-agent -l app.kubernetes.io/instance=calculus-agent
+```
+
+You should see a pod in `Running` state with `READY 1/1` (or `2/2` if the
+sandbox sidecar from Module 6 is enabled). If the pod is `CrashLoopBackOff`,
+`ImagePullBackOff`, or `Pending`, the next command will fail with "no running
+pod found" -- that's a deployment problem, not a FIPS problem; run
+`oc describe deployment calculus-agent -n calculus-agent` to diagnose.
+
+Once the pod is running:
 
 ```bash
 oc exec deployment/calculus-agent -n calculus-agent -- \

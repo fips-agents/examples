@@ -380,6 +380,9 @@ pip install -e '.[files]'
 
 ```bash
 make run-local &
+# Wait until the server is actually listening -- backgrounding doesn't
+# guarantee the HTTP port is open yet.
+until curl -sf http://localhost:8080/healthz >/dev/null 2>&1; do sleep 1; done
 echo "%PDF-1.4 stub" > /tmp/example.pdf
 curl -F "file=@/tmp/example.pdf" http://localhost:8080/v1/files | jq
 ```

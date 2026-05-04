@@ -268,20 +268,37 @@ the sandbox to evaluate the expression at each point and format the results.
 
 Understanding what the sandbox blocks is as important as knowing what it allows.
 
+The cleanest way to exercise the sandbox's defenses is to talk to it directly,
+bypassing the LLM. A well-aligned model asked to run `os.system("ls /")` may
+just refuse or describe the code instead of executing it -- which tells you
+nothing about whether the sandbox works. Hitting the sandbox over HTTP
+guarantees the request reaches the security layers.
+
+In one terminal, forward the sandbox port out of the pod:
+
+```bash
+oc port-forward -n calculus-agent \
+  deployment/calculus-agent 8000:8000
+```
+
+In a second terminal, POST code to `/execute`. Each example below is a
+self-contained `curl` you can run directly.
+
 ### Blocked: dangerous imports
 
-```python
-import os
-os.system("ls /")
+```bash
+curl -s localhost:8000/execute \
+  -H 'content-type: application/json' \
+  -d '{"code": "import os\nos.system(\"ls /\")"}' \
+  | python -m json.tool
 ```
 
 Response:
 
-```
-Error: Import 'os' is not allowed in the current security profile.
-Allowed modules: math, statistics, itertools, functools, re, datetime,
-collections, json, csv, string, textwrap, decimal, fractions, random,
-operator, typing
+```json
+{
+    "error": "Import 'os' is not allowed in the current security profile. Allowed modules: math, statistics, itertools, functools, re, datetime, collections, json, csv, string, textwrap, decimal, fractions, random, operator, typing"
+}
 ```
 
 The same happens for `subprocess`, `socket`, `shutil`, `ctypes`, `importlib`,
@@ -289,14 +306,19 @@ and any other module not on the allowlist.
 
 ### Blocked: code analysis patterns
 
-```python
-"".__class__.__bases__[0].__subclasses__()
+```bash
+curl -s localhost:8000/execute \
+  -H 'content-type: application/json' \
+  -d '{"code": "\"\".__class__.__bases__[0].__subclasses__()"}' \
+  | python -m json.tool
 ```
 
 Response:
 
-```
-Error: Code analysis blocked: access to '__subclasses__' is not permitted.
+```json
+{
+    "error": "Code analysis blocked: access to '__subclasses__' is not permitted."
+}
 ```
 
 The AST analyzer catches attribute access to dunder methods commonly used in
@@ -304,12 +326,29 @@ sandbox escape techniques.
 
 ### Blocked: resource exhaustion
 
-```python
-x = [0] * (10**9)
+```bash
+curl -s localhost:8000/execute \
+  -H 'content-type: application/json' \
+  -d '{"code": "x = [0] * (10**9)"}' \
+  | python -m json.tool
 ```
 
 The container's memory limit terminates the process before it can allocate
-gigabytes of memory. The agent receives a timeout or OOM error.
+gigabytes of memory. The response contains a timeout or OOM error rather than
+the allocated list.
+
+!!! tip "Optional: confirm the kill from the cluster side"
+    Unlike the import and AST cases -- where the sandbox itself produces the
+    error message -- resource exhaustion is enforced by the container runtime,
+    so the `curl` response may be terse. To see *why* the process died, check
+    the sandbox container's logs and the namespace's events:
+
+    ```bash
+    oc logs -n calculus-agent deployment/calculus-agent -c sandbox --tail=20
+    oc get events -n calculus-agent --field-selector reason=OOMKilling
+    ```
+
+When you're done testing, stop the `oc port-forward` process with Ctrl-C.
 
 ## Profiles
 
