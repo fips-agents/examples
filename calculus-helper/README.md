@@ -37,7 +37,7 @@ All math is passed as **Python/SymPy syntax strings**:
 - `x**2` not `x^2` (the server rejects `^` with a coaching message — in SymPy `^` is bitwise XOR and `2^3 = 1`).
 - `sin(x)`, `cos(x)`, `exp(x)`, `log(x)` (natural log), `sqrt(x)`, `log10(x)`, `log2(x)`, `arcsin(x)`, `arctan(x)`.
 - Constants: `pi`, `E`, `oo` (or `inf` / `infinity`), `-oo`.
-- Parsing uses a restricted whitelist — no arbitrary Python `eval`.
+- Parsing uses a restricted allowlist — no arbitrary Python `eval`.
 
 ---
 

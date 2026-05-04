@@ -45,7 +45,7 @@ sequenceDiagram
 
 All eight tools delegate their cross-cutting concerns to one module so behaviour stays uniform:
 
-- **`parse_expression(str, context=...)`** — the single entry point for turning an untrusted string into a `sp.Expr`. Uses a restricted whitelist namespace (trig, hyperbolic, exp/log, roots, `erf`, `gamma`, `factorial`, constants `pi`/`E`/`oo`, plus inverse-trig `arcsin`/`arctan`/... and base-specific logs `log10`/`log2`). Arbitrary Python `eval` is not reachable.
+- **`parse_expression(str, context=...)`** — the single entry point for turning an untrusted string into a `sp.Expr`. Uses a restricted allowlist namespace (trig, hyperbolic, exp/log, roots, `erf`, `gamma`, `factorial`, constants `pi`/`E`/`oo`, plus inverse-trig `arcsin`/`arctan`/... and base-specific logs `log10`/`log2`). Arbitrary Python `eval` is not reachable.
 - **`parse_symbol(str, context=...)`** — a stricter parser for bare identifiers (variable names). Rejects expressions.
 - **`parse_substitutions(dict, context=...)`** — `{name: value_expr}` pairs, with both sides routed through the strict parsers.
 - **`format_result(expr, assumptions, extra)`** — builds the standard return dict (`result` / `latex` / `is_exact` / `assumptions`), with optional `extra` keys for tools that return sets (`solve_equation`) or per-term coefficients (`taylor_series`).
@@ -55,7 +55,7 @@ All eight tools delegate their cross-cutting concerns to one module so behaviour
 
 SymPy's `implicit_multiplication_application` transformer bundles three rewrites: implicit multiplication (`2x → 2*x`), implicit function application, and **`split_symbols`** — which fractures multi-letter identifiers into products of single letters.
 
-`split_symbols` turns `log10(x)` into `l*o*g*10*x` and `arcsin(x)` into `a*c*i*n*r*s*x`, silently producing expressions the user never wrote. `src/calc.py` therefore uses `implicit_multiplication + implicit_application` without `split_symbols`, and adds `log10`, `log2`, `arcsin`, `arccos`, `arctan` (and hyperbolic inverses) to the whitelist so the common names resolve correctly. The tradeoff: `xy` is parsed as a single `Symbol("xy")` rather than `x*y`. Users write `x*y` explicitly instead.
+`split_symbols` turns `log10(x)` into `l*o*g*10*x` and `arcsin(x)` into `a*c*i*n*r*s*x`, silently producing expressions the user never wrote. `src/calc.py` therefore uses `implicit_multiplication + implicit_application` without `split_symbols`, and adds `log10`, `log2`, `arcsin`, `arccos`, `arctan` (and hyperbolic inverses) to the allowlist so the common names resolve correctly. The tradeoff: `xy` is parsed as a single `Symbol("xy")` rather than `x*y`. Users write `x*y` explicitly instead.
 
 ## Error contract
 

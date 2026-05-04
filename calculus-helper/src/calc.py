@@ -4,7 +4,7 @@ All calculus tools use SymPy for symbolic math. This module centralises the
 cross-cutting concerns so every tool behaves consistently:
 
 - ``parse_expression`` -- parse a user string into a SymPy expression using a
-  restricted whitelist namespace (no arbitrary Python ``eval``), with
+  restricted allowlist namespace (no arbitrary Python ``eval``), with
   coaching-style error messages for the most common syntax mistakes.
 - ``parse_symbol`` -- parse a bare identifier into a ``sympy.Symbol``.
 - ``parse_substitutions`` -- parse a ``{var_name: value_expr}`` dict.
@@ -34,7 +34,7 @@ from sympy.parsing.sympy_parser import (
 # Parsing
 # ---------------------------------------------------------------------------
 
-# Whitelisted names available inside parsed expressions.  Anything not in this
+# Allowlisted names available inside parsed expressions.  Anything not in this
 # dict (e.g. ``eval``, ``__import__``, file IO) is inaccessible.  Free names
 # that look like identifiers (``x``, ``theta``) become fresh SymPy ``Symbol``
 # instances automatically.
@@ -104,7 +104,7 @@ _SAFE_NAMESPACE: dict[str, Any] = {
 # ``log10(x)`` as ``l*o*g*10*x``, silently producing wrong answers that look
 # superficially like expressions.  We use ``implicit_multiplication`` (so
 # ``2x`` still means ``2*x``) and ``implicit_application`` without the
-# letter-level split.  Multi-letter identifiers not in the whitelist become a
+# letter-level split.  Multi-letter identifiers not in the allowlist become a
 # single ``Symbol`` — still not what the user wanted, but the mistake is now
 # visible rather than silent.
 _TRANSFORMATIONS = standard_transformations + (
@@ -117,7 +117,7 @@ def parse_expression(expr_str: str, *, context: str = "expression") -> sp.Expr:
     """Parse a user-supplied expression string into a SymPy expression.
 
     The parser uses a restricted namespace so arbitrary Python code cannot be
-    evaluated.  Identifiers not on the whitelist become fresh SymPy symbols.
+    evaluated.  Identifiers not on the allowlist become fresh SymPy symbols.
 
     Args:
         expr_str: The expression to parse, e.g. ``"sin(x) * exp(-x)"``.

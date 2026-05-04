@@ -27,7 +27,7 @@ _TRANSFORMATIONS = standard_transformations + (
 )
 
 # ---------------------------------------------------------------------------
-# Base safe namespace (same whitelist as calc.py, no mutation of the original)
+# Base safe namespace (same allowlist as calc.py, no mutation of the original)
 # ---------------------------------------------------------------------------
 _BASE_ODE_NAMESPACE: dict[str, Any] = {
     "pi": sp.pi,
@@ -90,7 +90,7 @@ def _parse_ode_expr(expr_str: str, func_sym: sp.Function, var_sym: sp.Symbol,
     """Parse an ODE expression string with the function and variable in namespace.
 
     This is needed because the shared ``parse_expression`` in calc.py doesn't
-    accept extra namespace entries. The ODE parser augments the whitelist with
+    accept extra namespace entries. The ODE parser augments the allowlist with
     the unknown function (e.g. ``f``) and the independent variable (e.g. ``x``)
     so that ``Derivative(f(x), x)`` and ``f(x)`` parse correctly.
 

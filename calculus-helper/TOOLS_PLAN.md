@@ -27,7 +27,7 @@ All expressions are passed as **strings in Python/SymPy syntax**:
 - Constants: `pi`, `E`, `oo` (infinity), `-oo`
 - Multiple-variable expressions: `x**2 + y*sin(z)`
 
-All parsing goes through a restricted `parse_expr` with a whitelisted symbol table — no arbitrary Python eval.
+All parsing goes through a restricted `parse_expr` with an allowlisted symbol table — no arbitrary Python eval.
 
 ## Output Conventions (shared across all tools)
 

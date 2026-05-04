@@ -83,7 +83,7 @@ auto-discovery scanner doesn't try to find tool decorators in it.
 
 ### The safe namespace
 
-The core idea is a **whitelist** of names available inside parsed expressions.
+The core idea is an **allowlist** of names available inside parsed expressions.
 Anything not in this dict -- `eval`, `__import__`, file I/O -- is inaccessible:
 
 ```python
@@ -98,7 +98,7 @@ _SAFE_NAMESPACE: dict[str, Any] = {
 
 !!! warning "Why not just `sympify`?"
     SymPy's `sympify()` calls Python's `eval()` internally -- arbitrary code
-    execution. The whitelist namespace restricts parsing to mathematical
+    execution. The allowlist namespace restricts parsing to mathematical
     functions only. Critical for any MCP server accepting user-supplied
     expressions.
 
