@@ -22,7 +22,7 @@ work through this checklist. Each item links to a setup guide if you need help.
 
 ### 1. An OpenShift cluster
 
-OpenShift 4.14 or later. You need cluster-admin (or equivalent permission to
+OpenShift 4.20 or later. You need cluster-admin (or equivalent permission to
 install operators and create namespaces).
 
 → See [Choosing a Cluster](guides/cluster-options.md) for self-managed,
@@ -34,12 +34,13 @@ ROSA, Developer Sandbox, and local CRC tradeoffs.
     time — it can't be turned on later. See the [Red Hat OpenShift FIPS
     documentation][fips] for instructions.
 
-    [fips]: https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/installing/installing-fips
+    [fips]: https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/installation_overview/installing-fips
 
-### 2. OpenShift AI
+### 2. Red Hat OpenShift AI
 
-The OpenShift AI operator must be installed and a `DataScienceCluster`
-provisioned (with KServe enabled for model serving).
+The **Red Hat OpenShift AI** operator (3.2 or later) must be installed via
+the `fast-3.x` channel, and a `DataScienceCluster` provisioned with KServe
+enabled for model serving. RHOAI 3.x requires OpenShift 4.20+.
 
 → See [Install OpenShift AI](guides/install-openshift-ai.md).
 

@@ -1,8 +1,13 @@
 # Choosing a Cluster
 
-This tutorial needs an OpenShift 4.14+ cluster where you can install operators
+This tutorial needs an OpenShift 4.20+ cluster where you can install operators
 and (ideally) attach a GPU. Several cluster options work — pick the one that
 matches your access and budget.
+
+!!! note "Why 4.20?"
+    Red Hat OpenShift AI 3.x requires OpenShift 4.19 or later, and several
+    RHOAI 3.2 features (e.g. llm-d distributed inference) require 4.20.
+    This tutorial is validated on the 4.20 + RHOAI 3.2 pairing.
 
 ## At a glance
 
@@ -61,7 +66,7 @@ If you're standing up a fresh cluster and your environment requires (or might
 require) FIPS, enable it at install time — FIPS cannot be enabled on an
 existing cluster. Every component built in this tutorial works in FIPS mode.
 
-→ [Installing a cluster in FIPS mode](https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/installing/installing-fips)
+→ [Installing a cluster in FIPS mode](https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/installation_overview/installing-fips)
 
 ## Next
 
