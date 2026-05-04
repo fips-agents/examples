@@ -1,5 +1,5 @@
 site_name: "Building AI Agents on Red Hat AI"
-site_description: "A hands-on tutorial for building, deploying, and extending AI agents on Red Hat AI using the fips-agents framework"
+site_description: "A hands-on tutorial for building, deploying, and extending AI agents on Red Hat AI using the fips-agents toolkit"
 site_url: https://fips-agents.github.io/examples/
 repo_url: https://github.com/fips-agents/examples
 repo_name: fips-agents/examples

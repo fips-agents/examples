@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A **tutorial repository** that teaches building, deploying, and extending AI agents on OpenShift using the [fips-agents](https://github.com/fips-agents) framework. It is _not_ application code — it is published documentation plus two completed worked examples.
+A **tutorial repository** that teaches building, deploying, and extending AI agents on OpenShift using the [fips-agents](https://github.com/fips-agents) toolkit (a scaffolding CLI plus composable templates — not a framework). It is _not_ application code — it is published documentation plus two completed worked examples.
 
 Three top-level concerns coexist here:
 
 1. **MkDocs tutorial site** (`docs/`, `mkdocs.yml`) — published to https://fips-agents.github.io/examples/ via `.github/workflows/pages.yml` on every push to `main`.
-2. **`calculus-agent/`** — finished BaseAgent-framework agent (the "Module 1–9" worked example). Has its own `CLAUDE.md` with framework-specific guidance.
+2. **`calculus-agent/`** — finished BaseAgent-based agent (the "Module 1–9" worked example). Has its own `CLAUDE.md` with BaseAgent-specific guidance.
 3. **`calculus-helper/`** — finished FastMCP v3 server providing 8 SymPy-powered calculus tools. Has its own `CLAUDE.md` with FastMCP-specific guidance.
 
 When working inside `calculus-agent/` or `calculus-helper/`, that sub-project's `CLAUDE.md` is authoritative — it covers the agent or MCP server's structure, decorators, deployment, and common mistakes. This top-level file is only for cross-cutting tutorial-repo work.
@@ -32,7 +32,7 @@ The `--strict` flag is what GitHub Actions uses, so always reproduce CI behavior
 
 - Modules 1–9 live in `docs/0N-*.md` and are referenced by number in cross-links.
 - Reference pages live in `docs/reference/` and are linked from multiple modules.
-- The tutorial pins a specific framework version (currently fipsagents v0.11.0 — see `docs/index.md`). Bumping that version requires a coordinated re-test of every module.
+- The tutorial pins a specific fipsagents version (currently v0.11.0 — see `docs/index.md`). Bumping that version requires a coordinated re-test of every module.
 
 When fixing issues found by tutorial walk-throughs, file them at `fips-agents/examples` on GitHub and link the issue from the commit.
 

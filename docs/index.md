@@ -2,7 +2,7 @@
 
 A hands-on tutorial that takes you from zero to a deployed AI agent system
 on **Red Hat AI**, using the [fips-agents](https://github.com/fips-agents)
-framework.
+toolkit.
 
 This tutorial was last verified against **fipsagents v0.11.0** (April 2026).
 

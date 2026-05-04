@@ -37,7 +37,7 @@ questions whose answers come from the document's contents.
 | **Compliance review** | "Cross-check this contract against the policy library" |
 
 In every case the agent's job is the same: receive an opaque `file_id`,
-retrieve the extracted text, and reason over it. The framework handles
+retrieve the extracted text, and reason over it. The agent server handles
 everything between "user clicked attach" and "extracted text is ready".
 
 ## Configuring the agent server
@@ -100,7 +100,7 @@ A successful upload returns the JSON metadata record:
 ```
 
 Hold on to that `file_id`. Pass it back to `/v1/chat/completions` via the
-`file_ids` array, and the framework injects the file's extracted text into
+`file_ids` array, and the agent server injects the file's extracted text into
 the conversation before the LLM sees the user's message:
 
 ```bash
@@ -129,9 +129,9 @@ which converts a wide range of formats to clean Markdown:
 
 Parsing runs **inline** — the upload response only returns once
 `parse_status` is `completed` (or `failed`). For large documents this can
-take seconds. The framework runs Docling under `asyncio.to_thread` so it
+take seconds. The agent server runs Docling under `asyncio.to_thread` so it
 doesn't block the event loop, but if your typical upload is a 200-page PDF
-you'll want to consider background-queue parsing (a future framework
+you'll want to consider background-queue parsing (a future agent-server
 feature; see `agent-template#100`).
 
 `parse_status` transitions:
@@ -177,7 +177,7 @@ files:
 ```
 
 !!! warning "S3-compatible bytes backend is not yet shipped"
-    The framework keeps bytes on local FS regardless of the metadata
+    The agent server keeps bytes on local FS regardless of the metadata
     backend. An S3-compatible `BytesStore` ABC is on the roadmap. Until
     it lands, multi-replica deployments need a `ReadWriteMany` PVC or a
     sticky-session ingress to keep uploads consistent.
@@ -275,7 +275,7 @@ the agent container automatically when both `files.enabled` and
     The reference `clamav/clamav:stable` image ships clamd on TCP 3310 but
     does not expose the `{infected, viruses}` JSON contract on its own.
     Either build a custom image with a small FastAPI shim that wraps clamd,
-    or deploy a tiny adapter container alongside it. The framework's
+    or deploy a tiny adapter container alongside it. The agent server's
     contract is documented at
     `packages/fipsagents/src/fipsagents/server/scanner.py`.
 
@@ -402,7 +402,7 @@ curl http://localhost:8080/v1/chat/completions \
 ```
 
 The agent answers using the document's content. No tool call was needed —
-the framework injected the extracted text before the LLM saw the prompt.
+the agent server injected the extracted text before the LLM saw the prompt.
 
 **Step 4: Verify the security controls**
 

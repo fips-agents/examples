@@ -63,7 +63,7 @@ OpenAI-compatible `/v1` URL -- vLLM, LlamaStack, llm-d, or any compatible API.
 |-------|------|---------|-------------|
 | `endpoint` | string | `http://llamastack:8321/v1` | OpenAI-compatible API base URL. |
 | `name` | string | `meta-llama/Llama-3.3-70B-Instruct` | Model identifier passed to the endpoint. |
-| `provider` | string | `openai` | LLM backend. Valid values: `openai` (any OpenAI-compatible endpoint -- default), `anthropic`, `bedrock`, `bedrock-converse`, `azure`, `openai-compatible`, `ollama`, `llama-cpp`, `vertex`. When provider is non-openai, the framework auto-rewrites the endpoint to the LLM adapter sidecar at `localhost:8081/v1`. |
+| `provider` | string | `openai` | LLM backend. Valid values: `openai` (any OpenAI-compatible endpoint -- default), `anthropic`, `bedrock`, `bedrock-converse`, `azure`, `openai-compatible`, `ollama`, `llama-cpp`, `vertex`. When provider is non-openai, the agent runtime auto-rewrites the endpoint to the LLM adapter sidecar at `localhost:8081/v1`. |
 | `temperature` | float | `0.7` | Sampling temperature. |
 | `max_tokens` | int | `4096` | Maximum tokens per completion. |
 

@@ -1,6 +1,6 @@
 # BaseAgent API
 
-Complete method reference for `BaseAgent`, the framework class your agent
+Complete method reference for `BaseAgent`, the base class your agent
 subclasses. Import it from `fipsagents.baseagent`:
 
 ```python

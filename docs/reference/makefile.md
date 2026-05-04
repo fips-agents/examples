@@ -148,18 +148,23 @@ make clean PROJECT=calculus-demo
 
 | Target | Description | When to use |
 |--------|-------------|-------------|
-| `vendor` | Vendor fipsagents source into the project | Switching from PyPI to a local copy of the framework (agent only) |
-| `update-framework` | Update vendored fipsagents to latest upstream | After a framework release (agent only) |
+| `vendor` | Vendor fipsagents source into the project | Switching from PyPI to a local copy of fipsagents (agent only) |
+| `update-fipsagents` | Update vendored fipsagents to latest upstream | After a fipsagents release (agent only) |
 
 ```bash
 make vendor             # initial vendoring
-make update-framework   # pull latest changes
+make update-fipsagents  # pull latest changes
 ```
 
+!!! note "Renamed from `update-framework`"
+    The target was renamed from `update-framework` to `update-fipsagents` to
+    match the package being updated. The old name is kept as a deprecated
+    alias and will be removed in a future release.
+
 These targets call `fips-agents vendor` under the hood. Vendoring copies the
-framework source into `src/fipsagents/` so the project has no PyPI dependency
+fipsagents source into `src/fipsagents/` so the project has no PyPI dependency
 on fipsagents at runtime. This is useful for air-gapped deployments or when you
-need to pin a specific framework version.
+need to pin a specific fipsagents version.
 
 ## Quick reference
 
@@ -179,7 +184,7 @@ All targets in a single table for quick scanning.
 | `deploy` | yes | yes | Deploy to OpenShift |
 | `redeploy` | yes | -- | Force-redeploy |
 | `clean` | yes | yes | Remove from OpenShift |
-| `vendor` | yes | -- | Vendor framework source |
-| `update-framework` | yes | -- | Update vendored framework |
+| `vendor` | yes | -- | Vendor fipsagents source |
+| `update-fipsagents` | yes | -- | Update vendored fipsagents |
 
 The MCP server also defines a `dev` alias that maps to `run-local`.
