@@ -207,7 +207,7 @@ appends all rules from `rules/`, and appends the skill manifest from
 
 ## The tool system
 
-The framework uses a **two-plane** model for tools:
+BaseAgent uses a **two-plane** model for tools:
 
 | Plane | Visibility | Who calls it | Example |
 |-------|-----------|-------------|---------|

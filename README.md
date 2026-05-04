@@ -1,6 +1,6 @@
 # Building AI Agents on Red Hat AI
 
-A hands-on tutorial for building, deploying, and extending AI agents on **Red Hat AI** (OpenShift AI on OpenShift) using the [fips-agents](https://github.com/fips-agents) framework.
+A hands-on tutorial for building, deploying, and extending AI agents on **Red Hat AI** (OpenShift AI on OpenShift) using the [fips-agents](https://github.com/fips-agents) toolkit.
 
 **[Start the tutorial](https://fips-agents.github.io/examples/)**
 

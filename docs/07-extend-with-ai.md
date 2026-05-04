@@ -191,7 +191,7 @@ The key additions to the `## Instructions` section:
 ```
 
 !!! info "The prompt describes capabilities, not schemas"
-    The framework injects tool schemas into the system message at runtime.
+    BaseAgent injects tool schemas into the system message at runtime.
     The prompt's job is to describe the domain, guide tool selection, and set
     behavioral expectations. It shouldn't duplicate what the schemas already
     communicate.

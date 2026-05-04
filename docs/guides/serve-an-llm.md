@@ -5,7 +5,7 @@ reference model is **`ibm-granite/granite-3.3-8b-instruct`** served via
 **vLLM**. Granite 3.3 8B is small enough to fit on a single 24 GB GPU at
 fp16, capable enough to drive multi-turn tool calls reliably, and works
 well in FIPS mode — useful since this tutorial targets the `fips-agents`
-framework.
+toolkit.
 
 This guide covers two paths:
 

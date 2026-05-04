@@ -36,7 +36,7 @@ the host kernel does not have FIPS enabled.
 
 ## The litellm migration
 
-The framework originally used **litellm** as an LLM abstraction layer. Two
+The agent runtime originally used **litellm** as an LLM abstraction layer. Two
 problems forced a switch:
 
 1. **FIPS incompatibility.** litellm's dependency tree pulls in cryptographic
@@ -321,7 +321,7 @@ typically doesn't need a longer timeout since it serves static assets.
 
 ## Observability
 
-The framework includes built-in observability features for production
+The agent runtime includes built-in observability features for production
 deployments: session persistence, Prometheus metrics, structured trace
 collection, and optional OpenTelemetry export. All are configured through
 `agent.yaml` and share a common storage backend.

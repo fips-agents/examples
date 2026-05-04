@@ -18,7 +18,7 @@ Before diving in, here's the full picture of what you're about to do:
 | `tools/web_search.py` | Delete | No longer needed -- real tools come from MCP |
 
 Everything else -- the Helm chart, the Containerfile, the Makefile, the
-framework code -- stays untouched. That's the power of the architecture: swap
+fipsagents code -- stays untouched. That's the power of the architecture: swap
 tools by changing config, not plumbing.
 
 ## Connect the MCP server
@@ -112,7 +112,7 @@ available to you: integration and differentiation.
 
 Three things to notice about this prompt:
 
-**It doesn't list tool names or schemas.** The framework injects tool schemas
+**It doesn't list tool names or schemas.** BaseAgent injects tool schemas
 automatically when building the system message. The prompt just describes the
 *domain* and the *behavior* -- the model discovers the specifics from the
 schemas.
