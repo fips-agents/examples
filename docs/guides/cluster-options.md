@@ -31,7 +31,7 @@ similar — ~24 GB VRAM minimum for Granite 3.3 8B at fp16).
 
 This is the most flexible option but also the most work.
 
-→ [Red Hat OpenShift install documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/installing/index)
+→ [Red Hat OpenShift install documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/installation_overview/index)
 
 ## ROSA / ARO
 
@@ -50,7 +50,7 @@ There's no GPU, so vLLM serving is not feasible — use Path B.
 CRC is fine for working through the agent / MCP server / gateway / UI parts
 of the tutorial against a remote LLM endpoint.
 
-[crc]: https://developers.redhat.com/products/openshift-local/overview
+[crc]: https://developers.redhat.com/products/openshift/download
 
 ## Red Hat Developer Sandbox
 
@@ -58,7 +58,7 @@ The [Developer Sandbox][sandbox] gives you a shared OpenShift environment
 with no install required. There are no GPUs and limited resource quotas, but
 it's the fastest way to get the agent stack running. Use Path B.
 
-[sandbox]: https://developers.redhat.com/developer-sandbox
+[sandbox]: https://www.redhat.com/en/technologies/cloud-computing/openshift/try-it
 
 ## FIPS mode
 

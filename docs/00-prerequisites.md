@@ -16,7 +16,7 @@ work through this checklist. Each item links to a setup guide if you need help.
     inference gateway, etc.). Wherever the tutorial says "set `MODEL_ENDPOINT`,"
     point it at your external URL.
 
-    [sandbox]: https://developers.redhat.com/developer-sandbox
+    [sandbox]: https://www.redhat.com/en/technologies/cloud-computing/openshift/try-it
 
 ## Requirements
 
