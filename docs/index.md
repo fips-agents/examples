@@ -59,6 +59,8 @@ tools, and registry access — is its own module:
 | [7. Extend with AI](07-extend-with-ai.md) | Use AI-assisted slash commands to add capabilities |
 | [8. Production Hardening](08-secrets-and-production.md) | Secrets, FIPS, scaling, observability (metrics, traces, sessions, user feedback) |
 | [9. File Uploads](09-file-uploads.md) | Drag-drop uploads, Docling parsing, MIME validation, ClamAV scanning |
+| [10. Platform Mode and Guardrails](10-guardrails-and-observability.md) | Graduate tool orchestration, shields, and tracing to OGX server-side. Requires fipsagents 0.21+ |
+| [11. Scaling with llm-d](11-scaling-with-llm-d.md) | Conceptual: disaggregated prefill/decode + KV-cache routing behind OGX |
 
 ## Reference
 

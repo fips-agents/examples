@@ -46,12 +46,17 @@ nav:
     - "7. Extend with AI": 07-extend-with-ai.md
     - "8. Production Hardening": 08-secrets-and-production.md
     - "9. File Uploads": 09-file-uploads.md
+    - "10. Platform Mode and Guardrails": 10-guardrails-and-observability.md
+    - "11. Scaling with llm-d": 11-scaling-with-llm-d.md
   - Setup Guides:
     - "Choosing a Cluster": guides/cluster-options.md
     - "Install OpenShift AI": guides/install-openshift-ai.md
     - "Serve an LLM": guides/serve-an-llm.md
     - "Install CLI Tools": guides/install-cli-tools.md
     - "Registry Setup": guides/registry-setup.md
+    - "Install OGX": guides/install-ogx.md
+    - "Configure Safety Shields": guides/configure-shields.md
+    - "Observability Backends": guides/observability-backends.md
   - Reference:
     - "agent.yaml": reference/agent-yaml.md
     - "Helm Chart": reference/helm-chart.md
