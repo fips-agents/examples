@@ -180,6 +180,15 @@ injected into the frontend JavaScript.
 
 ## Deploy the gateway
 
+!!! tip "Set `$CTX` to your kubeconfig context name"
+    Module 5 passes `--kube-context="$CTX"` and `--context="$CTX"` on every
+    `helm` and `oc` invocation. Set it once before you start so we don't
+    quietly mutate the active project on a shared kubeconfig:
+
+    ```bash
+    export CTX=$(oc config current-context)
+    ```
+
 Build and deploy the gateway to your namespace:
 
 ```bash
@@ -197,8 +206,15 @@ agent's in-cluster service URL:
 helm upgrade calculus-gateway chart/ \
   --set config.BACKEND_URL=http://calculus-agent:8080 \
   --reuse-values \
-  -n calculus-agent --kube-context=fips-rhoai
+  -n calculus-agent --kube-context="$CTX"
+
+# Roll the pod so it picks up the new ConfigMap
+oc rollout restart deployment/calculus-gateway -n calculus-agent --context="$CTX"
+oc rollout status deployment/calculus-gateway -n calculus-agent --context="$CTX"
 ```
+
+!!! warning "Why the explicit rollout restart"
+    Until [gateway-template#37](https://github.com/fips-agents/gateway-template/issues/37) lands, the gateway chart's Deployment template is missing a `checksum/config` annotation. That means `helm upgrade --reuse-values --set config.X=Y` updates the ConfigMap, but Kubernetes doesn't see a deployment change and the pod keeps its stale env vars. The gateway will return 502 to clients (it's still pointed at the chart-default backend) until you restart it. The same caveat applies to the UI deploy below; once the upstream fix lands, you can drop the `oc rollout restart` lines.
 
 !!! note "In-cluster service DNS"
     `http://calculus-agent:8080` uses Kubernetes short-name DNS. This works
@@ -210,7 +226,7 @@ helm upgrade calculus-gateway chart/ \
 Verify the gateway is proxying correctly:
 
 ```bash
-GW_ROUTE=$(oc get route calculus-gateway -n calculus-agent --context=fips-rhoai -o jsonpath='{.spec.host}')
+GW_ROUTE=$(oc get route calculus-gateway -n calculus-agent --context="$CTX" -o jsonpath='{.spec.host}')
 
 # Health check (gateway's own endpoint)
 curl -sk "https://$GW_ROUTE/healthz"
@@ -226,31 +242,23 @@ gateway pod --> agent service --> agent pod.
 
 ## Deploy the UI
 
-The UI scaffold doesn't include a `build-openshift` Makefile target, so you
-create the BuildConfig directly and build from source:
-
 ```bash
 cd calculus-ui
-oc new-build --binary --name=calculus-ui --strategy=docker \
-  -n calculus-agent --context=fips-rhoai
-oc patch bc/calculus-ui --patch '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"Containerfile"}}}}' \
-  -n calculus-agent --context=fips-rhoai
-oc start-build calculus-ui --from-dir=. --follow \
-  -n calculus-agent --context=fips-rhoai
+make build-openshift PROJECT=calculus-agent
+make deploy PROJECT=calculus-agent
 ```
 
-Once the image is built, deploy the Helm chart and point `API_URL` at the
-gateway's **in-cluster** service URL:
+Then set `API_URL` to point at the gateway's **in-cluster** service URL:
 
 ```bash
-IMAGE=$(oc get is calculus-ui -n calculus-agent --context=fips-rhoai \
-  -o jsonpath='{.status.dockerImageRepository}')
-
-helm upgrade --install calculus-ui chart/ \
-  --set image.repository=$IMAGE \
-  --set image.tag=latest \
+helm upgrade calculus-ui chart/ \
   --set config.API_URL=http://calculus-gateway:8080 \
-  -n calculus-agent --kube-context=fips-rhoai
+  --reuse-values \
+  -n calculus-agent --kube-context="$CTX"
+
+# Roll the pod (see the gateway-template#37 caveat above)
+oc rollout restart deployment/calculus-ui -n calculus-agent --context="$CTX"
+oc rollout status deployment/calculus-ui -n calculus-agent --context="$CTX"
 ```
 
 !!! info "In-cluster URL, not external route"
@@ -269,7 +277,7 @@ helm upgrade --install calculus-ui chart/ \
 Get the UI route and open it in your browser:
 
 ```bash
-UI_ROUTE=$(oc get route calculus-ui -n calculus-agent --context=fips-rhoai -o jsonpath='{.spec.host}')
+UI_ROUTE=$(oc get route calculus-ui -n calculus-agent --context="$CTX" -o jsonpath='{.spec.host}')
 echo "https://$UI_ROUTE"
 ```
 
@@ -283,12 +291,12 @@ at the edge. You need to raise it on both the gateway and UI routes.
 # Set 120-second timeout on the gateway route
 oc annotate route calculus-gateway \
   haproxy.router.openshift.io/timeout=120s \
-  --overwrite -n calculus-agent --context=fips-rhoai
+  --overwrite -n calculus-agent --context="$CTX"
 
 # Set 120-second timeout on the UI route
 oc annotate route calculus-ui \
   haproxy.router.openshift.io/timeout=120s \
-  --overwrite -n calculus-agent --context=fips-rhoai
+  --overwrite -n calculus-agent --context="$CTX"
 ```
 
 !!! warning "The silent 504"
@@ -330,9 +338,9 @@ If any request hangs or times out, check the route timeout annotation first.
 Then check pod logs for each component in the chain:
 
 ```bash
-oc logs deployment/calculus-ui -n calculus-agent --context=fips-rhoai --tail=20
-oc logs deployment/calculus-gateway -n calculus-agent --context=fips-rhoai --tail=20
-oc logs deployment/calculus-agent -n calculus-agent --context=fips-rhoai --tail=20
+oc logs deployment/calculus-ui -n calculus-agent --context="$CTX" --tail=20
+oc logs deployment/calculus-gateway -n calculus-agent --context="$CTX" --tail=20
+oc logs deployment/calculus-agent -n calculus-agent --context="$CTX" --tail=20
 ```
 
 ## Redeploying after changes
@@ -348,7 +356,7 @@ make deploy PROJECT=calculus-agent
 # UI
 cd calculus-ui
 oc start-build calculus-ui --from-dir=. --follow \
-  -n calculus-agent --context=fips-rhoai
+  -n calculus-agent --context="$CTX"
 make deploy PROJECT=calculus-agent
 ```
 

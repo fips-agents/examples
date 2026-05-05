@@ -44,16 +44,41 @@ somehow bypasses the import hook, it cannot reach external services.
     still protect you, and container resource limits remain your primary
     defense against resource exhaustion.
 
+## Build the sandbox image
+
+The sandbox is maintained as its own project at
+[fips-agents/code-sandbox](https://github.com/fips-agents/code-sandbox).
+Clone it and build the image into your `calculus-agent` namespace via
+BuildConfig — same pattern as the agent and the MCP server:
+
+```bash
+gh repo clone fips-agents/code-sandbox
+cd code-sandbox
+
+oc new-build --binary --name=code-sandbox --strategy=docker \
+  -n calculus-agent --context="$CTX"
+oc patch bc/code-sandbox --type=json \
+  -p '[{"op":"replace","path":"/spec/strategy/dockerStrategy/dockerfilePath","value":"Containerfile"}]' \
+  -n calculus-agent --context="$CTX"
+oc start-build code-sandbox --from-dir=. --follow \
+  -n calculus-agent --context="$CTX"
+```
+
+The build takes 2–3 minutes and pushes
+`image-registry.openshift-image-registry.svc:5000/calculus-agent/code-sandbox:latest`
+to the cluster's internal registry.
+
 ## Enable the sandbox in your Helm chart
 
 The sandbox is configured as an optional sidecar in the agent's Helm chart.
-Open `chart/values.yaml` and add the `sandbox` section:
+Open `chart/values.yaml` and add the `sandbox` section, pointing
+`image.repository` at the image stream you just built:
 
 ```yaml
 sandbox:
   enabled: true
   image:
-    repository: code-sandbox
+    repository: image-registry.openshift-image-registry.svc:5000/calculus-agent/code-sandbox
     tag: latest
   resources:
     limits:

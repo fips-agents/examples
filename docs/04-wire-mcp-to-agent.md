@@ -15,7 +15,6 @@ Before diving in, here's the full picture of what you're about to do:
 | `agent.yaml` | Add `mcp_servers:` entry | Tell the agent where to find the MCP server |
 | `prompts/system.md` | Rewrite for calculus domain | Tell the model what it is and what tools it has |
 | `src/agent.py` | Rename class for calculus domain | Update identity to match the new purpose |
-| `tools/web_search.py` | Delete | No longer needed -- real tools come from MCP |
 
 Everything else -- the Helm chart, the Containerfile, the Makefile, the
 fipsagents code -- stays untouched. That's the power of the architecture: swap
@@ -62,29 +61,19 @@ discovers the available tools, and registers them with `llm_only` visibility.
 The LLM sees them alongside any local tools -- it doesn't know or care which
 are local and which are remote.
 
-## Remove the mock tool
+## Local tools and MCP tools coexist
 
-The scaffolded project shipped with a `tools/web_search.py` placeholder. The
-calculus agent doesn't need it -- all its tools come from MCP. Delete it:
-
-```bash
-rm tools/web_search.py
-```
-
-If there are other example tools (like `format_citations.py` or
-`code_executor.py`), remove those too. The `tools/` directory can be empty, or
-you can keep it around for future local tools.
-
-!!! note "Local tools and MCP tools coexist"
-    Deleting `web_search.py` is a cleanup step, not a requirement. Local tools
-    and MCP-discovered tools coexist in the same registry. If you later need a
-    tool that's specific to this agent and doesn't belong in a shared MCP
-    server, add it back to `tools/`.
+Recent template versions ship `tools/` empty by default — your calculus
+agent's tools all come from MCP at this point. If your scaffold has any
+example tool files left over, you can delete them, but they don't have to
+go: local tools and MCP-discovered tools coexist in the same registry. If
+you later need a tool that's specific to this agent and doesn't belong in a
+shared MCP server, add it to `tools/`.
 
 ## Update the system prompt
 
-Open `prompts/system.md` and replace the Research Assistant prompt with one
-tailored to the calculus domain:
+Open `prompts/system.md` and replace the generic role-templated prompt with
+one tailored to the calculus domain:
 
 ```markdown
 ---

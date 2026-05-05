@@ -104,6 +104,20 @@ mcp_servers:
     args: [--verbose]
 ```
 
+### Platform mode (optional, off by default)
+
+```yaml
+platform:
+  enabled: ${PLATFORM_MODE:-false}
+  endpoint: ${OGX_ENDPOINT:-}
+```
+
+Off by default. When enabled, the agent delegates LLM orchestration to
+[OGX](https://ogx-ai.github.io/) — including MCP tool calls, shield
+enforcement, and the inference loop — instead of running them client-side.
+We cover this in [Module 10](10-guardrails-and-observability.md); leave it
+off until then.
+
 ### Local tools and server
 
 ```yaml
@@ -124,14 +138,13 @@ endpoint that the gateway and UI communicate through.
 
 ## Understanding src/agent.py
 
-The template gives you a `ResearchAssistant` that demonstrates all three
-model-calling patterns (`call_model`, `call_model_json`,
-`call_model_validated`). Here's the essential shape:
+The template gives you a `MyAgent` class with the minimal shape — one model
+call, optional tool dispatch, return:
 
 ```python
 from fipsagents.baseagent import BaseAgent, StepResult
 
-class ResearchAssistant(BaseAgent):
+class MyAgent(BaseAgent):
     async def step(self) -> StepResult:
         response = await self.call_model()
         response = await self.run_tool_calls(response)
@@ -149,6 +162,8 @@ reasoning. `call_model()` sends the conversation to the LLM with all
 registered tool schemas. `run_tool_calls()` executes any tool calls the LLM
 requested and re-calls the model until no more tool calls remain.
 
+**Richer calling patterns** are documented in the project's `CLAUDE.md` ("Calling Patterns"): structured output via `call_model_json`, validation-with-retry via `call_model_validated`, and agent-code tool dispatch via `self.use_tool()`. The minimal `step()` above is enough for the rest of this tutorial.
+
 **The `__main__` block.** Starts the agent as an HTTP server:
 
 ```python
@@ -158,7 +173,7 @@ if __name__ == "__main__":
 
     config = load_config("agent.yaml")
     server = OpenAIChatServer(
-        agent_class=ResearchAssistant,
+        agent_class=MyAgent,
         config_path="agent.yaml",
         title=config.agent.name,
         version=config.agent.version,
@@ -178,26 +193,28 @@ The system prompt uses **Markdown with YAML frontmatter**:
 ```markdown
 ---
 name: system
-description: System prompt for the Research Assistant agent
+description: System prompt for the agent
 temperature: 0.3
 variables:
-  - name: max_results
-    type: integer
-    description: Maximum number of search results to consider
-    default: "5"
+  - name: role
+    type: string
+    description: One-line role description used to focus the agent
+    default: "a helpful assistant"
 ---
 
-You are a Research Assistant. Your job is to answer questions thoroughly
-and accurately by searching for information and synthesizing what you find.
+You are {role}.
 
 ## Instructions
 
-1. When given a research question, use the `web_search` tool to find
-   relevant information...
+1. Use the tools available to you to accomplish the user's request.
+2. If the request is ambiguous, ask a clarifying question before acting.
+3. If you cannot complete the request, say so explicitly rather than
+   speculating.
 ```
 
 The frontmatter declares metadata and template variables. Variables use
-`{variable_name}` syntax and are substituted when loaded.
+`{variable_name}` syntax and are substituted when loaded. We'll replace this
+generic prompt with one tailored to the calculus domain in Module 4.
 
 The `prompts.system` field in `agent.yaml` designates which prompt file
 becomes the system prompt (defaults to `system`, which loads
@@ -301,24 +318,30 @@ curl localhost:8080/v1/agent-info | python -m json.tool
         "version": "0.1.0"
     },
     "model": {
-        "endpoint": "...",
-        "name": "..."
+        "name": "meta-llama/Llama-3.3-70B-Instruct",
+        "temperature": 0.7,
+        "max_tokens": 4096
     },
-    "tools": ["code_executor", "web_search"]
+    "system_prompt": "You are a helpful assistant.\n\n## Instructions\n...",
+    "tools": []
 }
 ```
 
-!!! warning "The mock tools"
-    The template ships with a `web_search` tool that returns fake results and
-    a `code_executor` that requires a sandbox sidecar (not running locally by
-    default). This is intentional -- it lets you verify the agent starts and
-    responds without external dependencies. We'll replace these with real
-    calculus tools in Modules 3 and 4.
+The `tools` array is a list of objects (`{name, description, parameters}`)
+when tools are registered, and `system_prompt` reflects the rendered prompt
+text after rule and skill injection.
+
+!!! note "MemoryHub log line"
+    On first start you'll see `MemoryHub config at .memoryhub.yaml has no
+    server_url — memory disabled (set server_url to enable).` That's expected
+    — the scaffold ships a stub `.memoryhub.yaml`, and the agent falls back
+    to `NullMemoryClient` cleanly. See `/add-memory` for wiring up real
+    memory later.
 
 Stop the server with `Ctrl+C`.
 
 ## What's next
 
-The scaffolded project runs, but it's still the generic Research Assistant with
-mock tools. In [Module 2](02-configure-and-deploy.md), you'll customize the
-configuration, point it at a real LLM on your OpenShift cluster, and deploy it.
+The scaffolded project runs but is still generic. In
+[Module 2](02-configure-and-deploy.md), you'll customize the configuration,
+point it at a real LLM on your OpenShift cluster, and deploy it.
