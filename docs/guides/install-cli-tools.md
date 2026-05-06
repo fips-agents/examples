@@ -73,7 +73,7 @@ PATH update takes effect.
 
     [oc-mirror]: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
 
-## helm 3.x
+## helm
 
 === "macOS"
 

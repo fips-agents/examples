@@ -5,9 +5,9 @@ and (ideally) attach a GPU. Several cluster options work — pick the one that
 matches your access and budget.
 
 !!! note "Why 4.20?"
-    Red Hat OpenShift AI 3.x requires OpenShift 4.19 or later, and several
-    RHOAI 3.2 features (e.g. llm-d distributed inference) require 4.20.
-    This tutorial is validated on the 4.20 + RHOAI 3.2 pairing.
+    Red Hat OpenShift AI 3.x requires OpenShift 4.19 or later, and RHOAI 3.x
+    distributed inference (e.g. llm-d) requires 4.20. This tutorial is
+    validated on OpenShift 4.20 + RHOAI 3.3 (channel `fast-3.x`).
 
 ## At a glance
 

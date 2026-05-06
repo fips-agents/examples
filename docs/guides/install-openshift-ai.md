@@ -15,8 +15,8 @@ for this tutorial but won't hurt if they're enabled.
 - `cluster-admin` rights
 - `oc` logged in to the cluster
 
-This tutorial targets **Red Hat OpenShift AI 3.2** (installed via the
-`fast-3.x` channel). RHOAI 3.x requires OpenShift 4.19 or later.
+This tutorial targets **Red Hat OpenShift AI 3.x** via the `fast-3.x`
+channel (validated on 3.3.1). RHOAI 3.x requires OpenShift 4.19 or later.
 
 ## Install the operator
 
@@ -60,8 +60,9 @@ oc get pods -n redhat-ods-operator -w
 ## Create a DataScienceCluster
 
 The `DataScienceCluster` (DSC) custom resource tells the operator which
-components to enable. For this tutorial you need **kserve** managed; the
-others can stay at their defaults.
+components to enable. For this tutorial you need **kserve** managed; leave
+the rest at the operator's defaults. Two non-obvious choices below get
+inline comments.
 
 ```yaml
 apiVersion: datasciencecluster.opendatahub.io/v1
@@ -72,17 +73,19 @@ spec:
   components:
     kserve:
       managementState: Managed
-      serving:
-        managementState: Managed
-        name: knative-serving
+      # The rest of the tutorial assumes KServe Raw with a Headless predictor
+      # service — that's what produces the `:8000` URL caveat in serve-an-llm.md
+      # and install-ogx.md. RHOAI 3.x defaults to Headless; setting it
+      # explicitly documents the dependency.
+      rawDeploymentServiceConfig: Headless
     dashboard:
       managementState: Managed
-    workbenches:
-      managementState: Managed
-    modelmeshserving:
+    llamastackoperator:
+      # RHOAI 3.x bundles a LlamaStack/OGX operator. We install the upstream
+      # ogx-k8s-operator in install-ogx.md instead (the rebrand hasn't shipped
+      # via RHOAI yet) — leaving this Removed avoids two operators reconciling
+      # the same LlamaStackDistribution.
       managementState: Removed
-    datasciencepipelines:
-      managementState: Managed
 ```
 
 Apply it:
@@ -98,10 +101,11 @@ oc get dsc default-dsc -o jsonpath='{.status.phase}'
 # Ready
 ```
 
-The Dashboard route should also resolve:
+The Dashboard hostname should also resolve. RHOAI 3.x exposes the
+dashboard via Gateway API (not a plain `Route` in `redhat-ods-applications`):
 
 ```bash
-oc get route -n redhat-ods-applications rhods-dashboard \
+oc get route data-science-gateway -n openshift-ingress \
   -o jsonpath='{.spec.host}'
 ```
 
