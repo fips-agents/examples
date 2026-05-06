@@ -13,7 +13,45 @@ Cluster test of a corrected `install-ogx.md` draft against the kagenti-memory-hu
 - `docs/11-scaling-with-llm-d.md` — same rename in the A/B-test paragraph
 - `docs/guides/observability-backends.md` — three replacements (`OGXDistribution` → `LlamaStackDistribution`, `oc edit ogxdistribution` → `oc edit llamastackdistribution`, granite model name → `vllm/RedHatAI/gpt-oss-20b` plus `max_tokens` so the reasoning trace doesn't truncate)
 
-**Known follow-up — `observability-backends.md` needs Wave-2-style treatment.** The doc currently shows enabling telemetry by adding `OTEL_EXPORTER_OTLP_ENDPOINT` as an env var on the `LlamaStackDistribution`, but our Wave 1 / Wave 2 ConfigMaps don't include the `telemetry` API or `providers.telemetry` block — so the env var alone won't wire OTLP through. A future pass should extend the `ogx-config` ConfigMap with `telemetry` similar to how Wave 2 added `safety`, and have observability-backends.md replace the ConfigMap rather than (or in addition to) editing the LSD CR. Not done in this iteration.
+**Telemetry / observability — env-var-only approach is correct, no ConfigMap needed.** Initial worry that `observability-backends.md` needed Wave-2-style ConfigMap treatment turned out to be wrong, traceable to outdated info in the early Explore-agent recipe. In OGX v0.7.1 telemetry is **built-in**, not a `config.yaml` provider — `llama_stack/telemetry/__init__.py` reads standard OpenTelemetry env vars at startup and configures exporters from there. The bundled starter `config.yaml` has no `telemetry` in `apis` or `providers` — confirmed by `cat`-ing it from inside the running pod.
+
+E2E test on the cluster surfaced three real bugs in the existing doc and one fundamental v0.7.1 limitation that needs a workaround:
+
+1. **Service name mismatch.** Doc claimed traces appear under service `ogx` in Jaeger, but the SDK default is `llama-stack`. Setting `OTEL_SERVICE_NAME=ogx` alongside `OTEL_EXPORTER_OTLP_ENDPOINT` makes the doc's promise true.
+2. **Stale Jaeger image tag.** Doc pinned `jaegertracing/all-in-one:1.62`, which never existed (Docker Hub's tag list starts at `1.63.0`; current is `1.76.0`). Updated to `1.76.0`.
+3. **`setup_telemetry()` only initializes `MeterProvider`, not `TracerProvider`.** Routers do `from opentelemetry import trace` and create spans (visible in `core/routers/safety.py`, `core/routers/inference.py`, etc.), but with no `TracerProvider` set, those spans go to the no-op default tracer and are discarded. Result: setting `OTEL_EXPORTER_OTLP_ENDPOINT` alone gives you metrics export only — Jaeger ingests traces (not metrics), so the UI stays empty.
+
+   **Workaround that worked:** override the container entrypoint to wrap with `opentelemetry-instrument`, which auto-configures both providers. The starter image already ships `opentelemetry-distro` + the relevant instrumentation packages.
+
+   ```yaml
+   spec:
+     server:
+       containerSpec:
+         command: ["opentelemetry-instrument"]
+         args:
+           - uvicorn
+           - llama_stack.core.server.server:create_app
+           - --host
+           - "0.0.0.0"
+           - --port
+           - "8321"
+           - --workers
+           - "1"
+           - --factory
+         env:
+           - name: OTEL_EXPORTER_OTLP_ENDPOINT
+             value: "http://jaeger.observability.svc.cluster.local:4318"
+           - name: OTEL_SERVICE_NAME
+             value: "ogx"
+           - name: OTEL_TRACES_EXPORTER
+             value: "otlp"
+           - name: OTEL_EXPORTER_OTLP_PROTOCOL
+             value: "http/protobuf"
+   ```
+
+   With the wrapper in place, Jaeger's `/api/services` returns `ogx` and `/api/traces?service=ogx` returns spans named `POST /v1/chat/completions`, `POST /v1/safety/run-shield`, `chat RedHatAI/gpt-oss-20b` (OGX-internal), `connect` (httpx outbound to vLLM), `INSERT /root/.llama/distributions/sql_store.db` (sqlite3 instrumentation), and asgi `http send/receive` spans. Doc rewritten to show this override and to flag that it should become unnecessary once upstream adds a `TracerProvider` to `setup_telemetry()`.
+
+   This is the most upstream-issue-worthy of all the findings in this iteration. Open it against `meta-llama/llama-stack` (or `ogx-ai/ogx-k8s-operator` if they prefer to bundle the wrapper into the image's entrypoint).
 
 ## Summary of drift caught beyond what `workshop-setup-ogx` already documents
 
