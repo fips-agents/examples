@@ -131,8 +131,8 @@ Parsing runs **inline** — the upload response only returns once
 `parse_status` is `completed` (or `failed`). For large documents this can
 take seconds. The agent server runs Docling under `asyncio.to_thread` so it
 doesn't block the event loop, but if your typical upload is a 200-page PDF
-you'll want to consider background-queue parsing (a future agent-server
-feature; see `agent-template#100`).
+you'll want background-queue parsing (still a future agent-server feature
+at the time of writing).
 
 `parse_status` transitions:
 
@@ -472,10 +472,9 @@ You now have file ingestion wired across the full stack. Some directions
 to take it further:
 
 - **Background-queue parsing** for large documents (multi-hundred-page
-  PDFs). Tracked on `agent-template#100`.
+  PDFs).
 - **Chunking + pgvector retrieval** so the agent doesn't dump entire
-  documents into context. Also tracked on `agent-template#100`; needs
-  a fresh ADR before code.
+  documents into context. Needs a fresh ADR before code.
 - **Custom parsers** beyond Docling — for example, the
   [xml-analysis-framework](https://github.com/redhat-ai-americas/xml-analysis-framework)
   for S1000D technical documentation, plugged in via the `FileParser`

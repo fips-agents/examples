@@ -30,6 +30,10 @@ The MCP server template ships with four commands that form a pipeline:
 Each step produces an artifact the next step consumes. You run them in order,
 reviewing output between steps.
 
+The template also ships secondary commands (`/implement-mcp-item`,
+`/update-docs`, `/write-system-prompt`) for narrower follow-up tasks; see
+`.claude/commands/` in your scaffolded project for the full list.
+
 ## Plan new tools
 
 Open Claude Code in the `calculus-helper` directory and run:
@@ -274,10 +278,10 @@ commands for any repeatable workflow: code review checklists, migration
 playbooks, documentation generators, release procedures.
 
 The agent template ships with its own set of commands (`/plan-agent`,
-`/create-agent`, `/exercise-agent`, `/add-tool`, `/add-skill`) that follow
-the same pattern. Both the MCP server and agent templates encode their
-development workflows as slash commands, making them reproducible and
-sharable across teams.
+`/create-agent`, `/exercise-agent`, `/add-tool`, `/add-skill`,
+`/add-memory`, `/deploy-agent`) that follow the same pattern. Both the MCP
+server and agent templates encode their development workflows as slash
+commands, making them reproducible and sharable across teams.
 
 !!! info "Creating your own slash commands"
     Create a `.claude/commands/` directory in any project. Add a Markdown

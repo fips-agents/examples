@@ -213,9 +213,6 @@ oc rollout restart deployment/calculus-gateway -n calculus-agent --context="$CTX
 oc rollout status deployment/calculus-gateway -n calculus-agent --context="$CTX"
 ```
 
-!!! warning "Why the explicit rollout restart"
-    Until [gateway-template#37](https://github.com/fips-agents/gateway-template/issues/37) lands, the gateway chart's Deployment template is missing a `checksum/config` annotation. That means `helm upgrade --reuse-values --set config.X=Y` updates the ConfigMap, but Kubernetes doesn't see a deployment change and the pod keeps its stale env vars. The gateway will return 502 to clients (it's still pointed at the chart-default backend) until you restart it. The same caveat applies to the UI deploy below; once the upstream fix lands, you can drop the `oc rollout restart` lines.
-
 !!! note "In-cluster service DNS"
     `http://calculus-agent:8080` uses Kubernetes short-name DNS. This works
     when the gateway and agent are in the same namespace. For cross-namespace
@@ -256,7 +253,7 @@ helm upgrade calculus-ui chart/ \
   --reuse-values \
   -n calculus-agent --kube-context="$CTX"
 
-# Roll the pod (see the gateway-template#37 caveat above)
+# Roll the pod so it picks up the new ConfigMap
 oc rollout restart deployment/calculus-ui -n calculus-agent --context="$CTX"
 oc rollout status deployment/calculus-ui -n calculus-agent --context="$CTX"
 ```

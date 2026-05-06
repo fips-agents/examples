@@ -26,11 +26,11 @@ cd calculus-agent && ls
 ```
 
 ```
-AGENTS.md       CLAUDE.md       Containerfile   Makefile
-README.md       agent.yaml      chart/          deploy.sh
-evals/          prompts/        pyproject.toml  redeploy.sh
-rules/          skills/         src/            tests/
-tools/
+.claude/        AGENTS.md       CLAUDE.md       Containerfile
+Makefile        README.md       agent.yaml      chart/
+deploy.sh       evals/          prompts/        pyproject.toml
+redeploy.sh     rules/          skills/         src/
+tests/          tools/
 ```
 
 ## Project structure
