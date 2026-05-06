@@ -48,6 +48,7 @@ nav:
     - "9. File Uploads": 09-file-uploads.md
     - "10. Platform Mode and Guardrails": 10-guardrails-and-observability.md
     - "11. Scaling with llm-d": 11-scaling-with-llm-d.md
+    - "Where to Go Next": where-next.md
   - Setup Guides:
     - "Choosing a Cluster": guides/cluster-options.md
     - "Install OpenShift AI": guides/install-openshift-ai.md

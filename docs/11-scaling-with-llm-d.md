@@ -74,4 +74,6 @@ When you're ready to test it without disturbing your tutorial deployment, point 
 
 You've reached the end of the structured tutorial. The patterns you've built up — scaffolding agents with `fips-agents create`, exposing tools via MCP, hardening for production, graduating concerns to the platform — apply to any agent you want to build on Red Hat AI. The reference pages in the sidebar cover the configuration surface in depth when you need it.
 
+[Where to Go Next](where-next.md) names the layer above the OGX-shaped platform you've built — agent-to-agent communication, workload identity, gateway-level policy — and points at one specific open-source project worth knowing about before you decide what to build on top of this stack.
+
 If you build something with this stack, file an issue or PR at [fips-agents/examples](https://github.com/fips-agents/examples) — the tutorial improves the most when it bumps into real-world problems we hadn't thought of.
