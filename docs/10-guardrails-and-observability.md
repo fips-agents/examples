@@ -281,7 +281,7 @@ The same pattern applies to other concerns over time — memory, prompt manageme
 
 ## Further reading
 
-- [agent-template#154](https://github.com/fips-agents/agent-template/issues/154) — design discussion that produced platform mode
+- [agent-template#154](https://github.com/fips-agents/agent-template/issues/154) — the feature issue that introduced platform mode (closed; landed in fipsagents 0.21)
 - [OGX Responses API](https://ogx-ai.github.io/docs/api/create-openai-response-v-1-responses-post)
 - [OGX safety shields](https://ogx-ai.github.io/docs/building_applications/safety)
 - [OGX moderations](https://ogx-ai.github.io/docs/api) — `/v1/moderations`

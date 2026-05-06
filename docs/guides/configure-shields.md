@@ -24,7 +24,7 @@ Both paths produce a registered shield ID that Module 10 reads from `OGX_SHIELD`
 
 The starter distribution ships an inline `code-scanner` provider that catches dangerous code patterns (`eval(input())`, raw `subprocess` shell, etc.) without calling any external model. It's the shield used in the agent-template's live integration tests, so we know it works against the upstream distribution.
 
-Replace the `ogx-config` ConfigMap with this Wave 2 version. The diff vs Wave 1 is two additions: `safety` in `apis`, `providers.safety` with the `code-scanner` provider, and one entry under `registered_resources.shields`.
+Replace the `ogx-config` ConfigMap with this Wave 2 version. The diff vs Wave 1 covers four concerns at once: registering the `code-scanner` shield, and three additions Module 10's platform mode also depends on (`responses` API, `storage:` backends, top-level `safety.default_shield_id`). The "Why each new block" notes after the ConfigMap walk through each.
 
 ```yaml
 apiVersion: v1
@@ -37,9 +37,13 @@ data:
     version: 2
     image_name: tutorial
     apis:
+      - file_processors
+      - files
       - inference
+      - responses
       - safety
       - tool_runtime
+      - vector_io
     providers:
       inference:
         - provider_id: vllm
@@ -48,6 +52,35 @@ data:
             base_url: ${env.VLLM_URL:=}
             max_tokens: ${env.VLLM_MAX_TOKENS:=4096}
             api_token: ${env.VLLM_API_TOKEN:=fake}
+      vector_io:
+        - provider_id: faiss
+          provider_type: inline::faiss
+          config:
+            persistence:
+              namespace: vector_io::faiss
+              backend: kv_default
+      files:
+        - provider_id: builtin-files
+          provider_type: inline::localfs
+          config:
+            storage_dir: /home/lls/.lls/files
+            metadata_store:
+              table_name: files_metadata
+              backend: sql_default
+      file_processors:
+        - provider_id: pypdf
+          provider_type: inline::pypdf
+      responses:
+        - provider_id: builtin
+          provider_type: inline::builtin
+          config:
+            persistence:
+              agent_state:
+                namespace: agents
+                backend: kv_default
+              responses:
+                table_name: responses
+                backend: sql_default
       safety:
         - provider_id: code-scanner
           provider_type: inline::code-scanner
@@ -61,9 +94,38 @@ data:
         - shield_id: code-scanner
           provider_id: code-scanner
       tool_groups: []
+    storage:
+      backends:
+        kv_default:
+          type: kv_sqlite
+          db_path: /home/lls/.lls/kvstore.db
+        sql_default:
+          type: sql_sqlite
+          db_path: /home/lls/.lls/sql_store.db
+      stores:
+        metadata:
+          namespace: registry
+          backend: kv_default
+        inference:
+          table_name: inference_store
+          backend: sql_default
+        conversations:
+          table_name: openai_conversations
+          backend: sql_default
+    safety:
+      default_shield_id: code-scanner
     server:
       port: 8321
 ```
+
+**Why each new block:**
+
+- **`responses` in `apis:` + `providers.responses:`** — exposes `POST /v1/responses`, the OpenAI-style endpoint Module 10's platform mode targets. Without it, an agent calling `/v1/responses` gets `404 Not Found` and Module 10 is a no-op. The `inline::builtin` provider stores agent state in the SQLite backends defined under `storage:` below.
+- **`vector_io` + `files` + `file_processors` providers** — the `responses` provider has hard dependencies on these three (OGX rejects startup with *"required dependency 'vector_io' is not available"* / *"...'files' is not available"* if you omit them). Module 10 doesn't *use* the vector or file APIs directly, but the dep wiring is enforced at provider-resolution time. The `inline::faiss` / `inline::localfs` / `inline::pypdf` providers are the lightest options and need no external infrastructure.
+- **`storage:` block** — defines the `kv_default` (sqlite key-value) and `sql_default` (sqlite SQL) backends that the responses, vector_io, and files providers reference for persistence. Pointing them at `/home/lls/.lls/` puts the SQLite files on the LSD's mounted PVC, so they survive pod restarts. Without this block the providers fail to initialize.
+- **Top-level `safety.default_shield_id`** — gives `POST /v1/moderations` a model to default to. Module 10's `BaseAgent.moderate("text")` example doesn't pass a model parameter; without `default_shield_id` set here, OGX rejects the call with *"No moderation model specified and no default_shield_id configured."*
+
+The whole expansion mirrors the upstream LlamaStack starter distribution config. The canonical reference is `llama_stack/distributions/starter/run.yaml`; this ConfigMap is the minimum subset of that starter that satisfies Module 10 without dragging in eval/scoring/datasetio providers we don't use.
 
 ```bash
 oc apply -f ogx-config.yaml
@@ -264,9 +326,13 @@ data:
     version: 2
     image_name: tutorial
     apis:
+      - file_processors
+      - files
       - inference
+      - responses
       - safety
       - tool_runtime
+      - vector_io
     providers:
       inference:
         - provider_id: vllm
@@ -281,6 +347,35 @@ data:
             base_url: http://llama-guard-predictor.llama-guard-model.svc.cluster.local:8000/v1
             max_tokens: 128
             api_token: fake
+      vector_io:
+        - provider_id: faiss
+          provider_type: inline::faiss
+          config:
+            persistence:
+              namespace: vector_io::faiss
+              backend: kv_default
+      files:
+        - provider_id: builtin-files
+          provider_type: inline::localfs
+          config:
+            storage_dir: /home/lls/.lls/files
+            metadata_store:
+              table_name: files_metadata
+              backend: sql_default
+      file_processors:
+        - provider_id: pypdf
+          provider_type: inline::pypdf
+      responses:
+        - provider_id: builtin
+          provider_type: inline::builtin
+          config:
+            persistence:
+              agent_state:
+                namespace: agents
+                backend: kv_default
+              responses:
+                table_name: responses
+                backend: sql_default
       safety:
         - provider_id: code-scanner
           provider_type: inline::code-scanner
@@ -303,14 +398,36 @@ data:
           provider_id: llama-guard
           provider_shield_id: vllm-guard/RedHatAI/Llama-Guard-4-12B-quantized.w8a8
       tool_groups: []
+    storage:
+      backends:
+        kv_default:
+          type: kv_sqlite
+          db_path: /home/lls/.lls/kvstore.db
+        sql_default:
+          type: sql_sqlite
+          db_path: /home/lls/.lls/sql_store.db
+      stores:
+        metadata:
+          namespace: registry
+          backend: kv_default
+        inference:
+          table_name: inference_store
+          backend: sql_default
+        conversations:
+          table_name: openai_conversations
+          backend: sql_default
+    safety:
+      default_shield_id: code-scanner
     server:
       port: 8321
 ```
 
-Two non-obvious bits in this ConfigMap:
+Two non-obvious bits specific to Llama Guard:
 
 - **`provider_shield_id` is the registered model id.** The `inline::llama-guard` provider reads `shield.provider_resource_id` (which OGX populates from the YAML field `provider_shield_id`) and uses it as the model id when calling the inference API. That id has to match what `/v1/models` advertises — which is the `<provider_id>/<model_id>` prefixed form, **not** the bare model id. A `params.model` field is silently ignored by this provider.
 - **`vllm-guard.config.max_tokens: 128`.** Without it, the provider defaults to a `max_tokens` matching the model's full context (4096), which leaves zero input headroom and vLLM returns HTTP 400. Llama Guard's complete output is `safe` or `unsafe\n<category>` — 10–20 tokens — so 128 is generous.
+
+The `responses`/`storage`/top-level `safety` blocks have the same role as in Path A — see "Why each new block" above. Switching `default_shield_id` to `llama-guard` here would make `/v1/moderations` use Llama Guard's S1–S14 taxonomy instead of `code-scanner`'s pattern matcher; both work, pick by which categories your dashboards need.
 
 Apply, roll, verify as in Path A — `GET /v1/shields` should now return both entries:
 
