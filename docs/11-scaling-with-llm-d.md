@@ -68,7 +68,9 @@ The llm-d project documents its own quickstart and Kubernetes install. Two pages
 - [llm-d.ai](https://llm-d.ai) — the project home, with the latest version and architecture overview
 - [github.com/llm-d/llm-d](https://github.com/llm-d/llm-d) — source, releases, and the Kubernetes deployment manifests
 
-When you're ready to test it without disturbing your tutorial deployment, point a *second* `LlamaStackDistribution` at the llm-d gateway, register it as a separate `provider_id` in the same OGX `config.yaml`, and shadow-route a percentage of traffic. The platform-mode design from Module 10 makes A/B comparison a config edit, not an architectural change.
+When you're ready to test it without disturbing your tutorial deployment, **add llm-d as a third entry in `providers.inference[]`** in your existing OGX `config.yaml`, then register the llm-d-served model under that new `provider_id` in `registered_resources.models[]`. After an OGX rollout, agents can target either backend by setting their `model` to one served by `vllm` (your existing inference service) or by `llm-d` — same agent code, same OGX, different `model_id`. There's only ever one `LlamaStackDistribution`; OGX is multi-provider by design.
+
+OGX itself does not split traffic by percentage between two providers serving the same `model_id`. If you want side-by-side shadow comparison, do it one layer up — at the agent (route a fraction of requests to a different `model_id`) or at the gateway (HTTPRoute weights pointing at two OGX endpoints). The "platform-mode" payoff of Module 10 is real but bounded: switching inference providers is a config edit; A/B *traffic splitting* is not.
 
 ## What's next
 
