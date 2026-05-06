@@ -1,12 +1,12 @@
 # Next Session
 
-**Last refreshed:** 2026-05-06 (post Phases 1–4 of #28 + calculus-agent re-scaffold — already-validated guides re-verified, setup guides refreshed for RHOAI 3.3, Modules 0–9 audited, calculus-agent worked example brought to v0.11.1 template parity, Module 10 substrate enabled in `configure-shields.md` Wave 2 — `/v1/responses` + `/v1/moderations` verified live)
+**Last refreshed:** 2026-05-06 (post Phases 1–5 of #28 + calculus-agent re-scaffold — full audit pass complete; one inline edit (F22) deferred to chain onto #30's upstream-filing work; Module 10 substrate verified live; calculus-agent on v0.11.1 template parity)
 
 ## Where we are
 
 Tutorial content is complete (12 modules + setup + reference) plus the closing **["Where to Go Next"](docs/where-next.md)** page. Module 11's "second LlamaStackDistribution / shadow-route" paragraph was corrected against a real OGX cluster in commit `1f40e27`.
 
-**Phases 1–3 of #28 are done** (this session). Six commits, all under `docs:`. State of the original 5-phase plan:
+**Phases 1–5 of #28 are done** (this session). State of the original 5-phase plan:
 
 | Phase | Status | Notes |
 |---|---|---|
@@ -15,30 +15,28 @@ Tutorial content is complete (12 modules + setup + reference) plus the closing *
 | 2 (setup guides) | done | RHOAI 3.2→3.3 version pin, DSC YAML rewrite, dashboard-via-Gateway-API verify command, helm 4 |
 | 3 (Modules 0–9) | done | 5 trivial edits + 1 paragraph rewrite + Module 6 sandbox swap; calculus-agent re-scaffolded from v0.11.1, F9+F10 resolved |
 | 4 (Module 10) | done | Substrate gap surfaced + fixed: `configure-shields.md` Wave 2 now enables `responses` API + deps + `default_shield_id`. `/v1/responses` and `/v1/moderations` verified end-to-end. Agent-side claims (`call_model_responses` signature, `PlatformResponse` fields) still need a deployed Module 10 worked example to verify |
-| 5 (Module 11) | next | Mostly prose verification — Phase 0 covered the integration mechanics |
+| 5 (Module 11) | done (audit) | Cleanest pass — only finding (F22) is a small OpenShift SCC caveat in "Getting started"; deferred to chain onto #30 (file llm-d/llm-d upstream issue first, then update Module 11 to point at the filed issue) |
 
-Per-phase findings under `retrospectives/2026-05-06_tutorial-walkthrough/findings/0[1-3]-*.md`.
+Per-phase findings under `retrospectives/2026-05-06_tutorial-walkthrough/findings/0[0-5]-*.md`.
 
 ## Open issues, in priority order
 
-### 1. [#28 — Automated tutorial walkthrough (Modules 0–11)](https://github.com/fips-agents/examples/issues/28)
+### 1. [#30 — File upstream issues](https://github.com/fips-agents/examples/issues/30)
 
-Only Phase 5 (Module 11 prose verification) remains. Phase 0 already settled the llm-d integration mechanics; Phase 5 is a re-read of Module 11's prose against the current llm-d state on whatever cluster is up.
+Now top of the list — Phase 5's F22 chains onto this work, and the audit pass is otherwise complete. Backlog:
 
-### 2. [#30 — File upstream issues](https://github.com/fips-agents/examples/issues/30)
+- Original five drafts (against `meta-llama/llama-stack` and `ogx-ai/ogx-k8s-operator`) still pending.
+- `findings/upstream-llm-d-doc-drift.md` — README on `main` references guides not present in tag `v0.6.0`.
+- `findings/upstream-llm-d-openshift-scc.md` — optimized-baseline manifests CrashLoopBackOff on OpenShift's `restricted-v2` SCC. **Filing this is the F22 dependency** — once landed upstream, point `docs/11-scaling-with-llm-d.md`'s "Getting started" section at the filed issue with a one-paragraph note. F22 detail in `findings/05-phase5-module-11.md`.
+- One additional curiosity surfaced in Phase 4 worth confirming/filing: OGX's `code-scanner` shield refusal stringifies the comma-separated `violation_type` character-by-character (`(violation type: e, v, a, l, …)` instead of `(violation type: eval-with-expression, insecure-eval-use)`). Looks like an upstream LlamaStack bug; mentioned in `findings/04-phase4-module-10.md`.
 
-Original five drafts (against `meta-llama/llama-stack` and `ogx-ai/ogx-k8s-operator`) still pending. Two new llm-d drafts added in Phase 0:
+Open question (unchanged): file the llm-d drafts under #30 (broaden its scope) or open a sibling tracking issue specifically for `llm-d/llm-d`?
 
-- `findings/upstream-llm-d-doc-drift.md` — README on `main` references guides not present in tag `v0.6.0`
-- `findings/upstream-llm-d-openshift-scc.md` — optimized-baseline manifests CrashLoopBackOff on OpenShift's `restricted-v2` SCC
+Filing happens in its own session — research each upstream's CONTRIBUTING / issue-template first. llm-d uses a Bug Report YAML template (no docs template) — the two existing drafts are pre-formatted for it.
 
-Open question: file the llm-d drafts under #30 (broaden its scope) or open a sibling tracking issue specifically for `llm-d/llm-d`?
+### 2. [#29 — Human walkthrough](https://github.com/fips-agents/examples/issues/29)
 
-Filing happens in its own session — research each upstream's CONTRIBUTING / issue-template first.
-
-### 3. [#29 — Human walkthrough](https://github.com/fips-agents/examples/issues/29) (blocked by #28)
-
-Clean-room read-through for flow and clarity. Worth scheduling once Phase 5 lands — the calculus-agent re-scaffold and the Module 10 substrate fix this session already closed two of the gaps that would have tripped #29 immediately.
+The audit pass is done; the worked-example gap is closed; the Module 10 substrate is live-verified. #29's clean-room read-through is now genuinely unblocked. Schedule whenever a fresh-eyes session is available; F22's deferral doesn't block (it's a known footgun with a known fix, not a doc-flow problem).
 
 ## What landed this session
 
@@ -54,8 +52,10 @@ Clean-room read-through for flow and clarity. Worth scheduling once Phase 5 land
 | `2e37e3c` | `refactor: Re-scaffold calculus-agent from v0.11.1 template (F9, F10, #28)` |
 | `9a19def` | `docs: Update NEXT_SESSION.md to reflect calculus-agent re-scaffold` |
 | `91e19f2` | `docs: Enable Module 10 platform mode in configure-shields Wave 2 (F18, F19, F20, #28 phase 4)` |
+| `b127d6b` | `docs: Update NEXT_SESSION.md after Phase 4` |
+| `ff87ff1` | `docs: Add Phase 5 retrospective — Module 11 audit (#28)` |
 
-Phase 1 had no doc edits (clean). Phase 2 touched 3 setup guides (`cluster-options`, `install-cli-tools`, `install-openshift-ai`). Phase 3 + follow-ups touched 6 module/page files (`01-scaffold-agent`, `05-gateway-and-ui`, `06-code-sandbox`, `07-extend-with-ai`, `09-file-uploads`, `where-next`). The re-scaffold touched 23 files inside `calculus-agent/`, plus `.gitignore` (the prep that lets `.claude/commands/` actually commit). Phase 4 extended `configure-shields.md`'s Wave 2 ConfigMap (Path A + Path B) and reframed one bullet in `10-guardrails-and-observability.md`; cluster `ogx-config` ConfigMap was rolled to match.
+Phase 1 had no doc edits (clean). Phase 2 touched 3 setup guides (`cluster-options`, `install-cli-tools`, `install-openshift-ai`). Phase 3 + follow-ups touched 6 module/page files (`01-scaffold-agent`, `05-gateway-and-ui`, `06-code-sandbox`, `07-extend-with-ai`, `09-file-uploads`, `where-next`). The re-scaffold touched 23 files inside `calculus-agent/`, plus `.gitignore` (the prep that lets `.claude/commands/` actually commit). Phase 4 extended `configure-shields.md`'s Wave 2 ConfigMap (Path A + Path B) and reframed one bullet in `10-guardrails-and-observability.md`; cluster `ogx-config` ConfigMap was rolled to match. Phase 5 added the Module 11 retrospective with no doc-side edits (F22 deferred to chain onto #30).
 
 ## Cluster state — `cluster-hpdl7-sandbox2435` (context: `kagenti-memory-hub`)
 
