@@ -55,6 +55,7 @@ A handful of specs and projects are worth knowing about even if you don't deploy
 - **[MCP specification](reference/mcp-protocol.md)** — the protocol you've been using all along. The reference page in this tutorial covers the tutorial-relevant subset; the [official spec](https://modelcontextprotocol.io) covers the full surface.
 - **[Kuadrant MCP Gateway](https://github.com/Kuadrant/mcp-gateway)** — the gateway component Kagenti uses, but usable standalone if you want unified MCP ingress without the rest of the platform.
 - **[llm-d](https://llm-d.ai)** — covered conceptually in [Module 11](11-scaling-with-llm-d.md). Worth reading the project's own architecture docs before you decide you need it.
+- **More `fips-agents create` subcommands.** `fips-agents create --help` lists scaffolders this tutorial doesn't use directly: `workflow` (multi-step pipelines), `model-car` (ModelCar packaging for Hugging Face models), and `sandbox` (a code-execution sandbox template). Worth peeking at when you outgrow what the tutorial covers.
 
 ## What this means for the tutorial
 
