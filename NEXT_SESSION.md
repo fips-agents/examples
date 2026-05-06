@@ -1,6 +1,6 @@
 # Next Session
 
-**Last refreshed:** 2026-05-06 (post Phases 1–3 of #28 — already-validated guides re-verified, setup guides refreshed for RHOAI 3.3, Modules 0–9 audited; inline-fixable drift cleared, two worked-example items deferred)
+**Last refreshed:** 2026-05-06 (post Phases 1–3 of #28 + calculus-agent re-scaffold — already-validated guides re-verified, setup guides refreshed for RHOAI 3.3, Modules 0–9 audited and inline drift cleared, calculus-agent worked example brought to v0.11.1 template parity)
 
 ## Where we are
 
@@ -13,7 +13,7 @@ Tutorial content is complete (12 modules + setup + reference) plus the closing *
 | 0 (llm-d) | done | `findings/00-llm-d-phase0.md` |
 | 1 (already-validated guides) | done | byte-for-byte match against live cluster — no drift |
 | 2 (setup guides) | done | RHOAI 3.2→3.3 version pin, DSC YAML rewrite, dashboard-via-Gateway-API verify command, helm 4 |
-| 3 (Modules 0–9) | inline-fixes done; worked-example items deferred | 5 trivial edits + 1 paragraph rewrite landed; 2 items collapse into a re-scaffold work item (see below) |
+| 3 (Modules 0–9) | done | 5 trivial edits + 1 paragraph rewrite + Module 6 sandbox swap; calculus-agent re-scaffolded from v0.11.1, F9+F10 resolved |
 | 4 (Module 10) | next | Mostly re-verifiable against the live OGX install (Phase 1+2 already validated the substrate) |
 | 5 (Module 11) | next | Mostly prose verification — Phase 0 covered the integration mechanics |
 
@@ -25,20 +25,7 @@ Per-phase findings under `retrospectives/2026-05-06_tutorial-walkthrough/finding
 
 Phases 4 and 5 remain. Both are lighter than Phase 3 — Module 10's runtime substrate is already known-good (verified in Phases 1+2 as a side effect), and Module 11's integration claim was settled in Phase 0, leaving just prose verification.
 
-### 2. New: re-scaffold `calculus-agent/` from current v0.11.x template
-
-Surfaced by Phase 3 audit. Two findings (F9, F10) collapse into one work item:
-
-- **F9** — `calculus-agent/.claude/commands/` directory missing. A fresh `fips-agents create agent` produces 7 slash-command files; the committed worked example has none. Module 7's slash-command flow has no working example to point at.
-- **F10** — `calculus-agent/agent.yaml` `mcp_servers:` is empty. Module 4's whole payoff is wiring it up; the worked example doesn't show the result.
-
-CLAUDE.md (top-level) is explicit: worked examples are scaffolded outputs and should be re-scaffolded when stale, not hand-edited. Precedent exists — commit `067b73f` ("refactor: Re-scaffold calculus-agent from v0.11.0 template").
-
-**Scope:** scaffold a fresh `calculus-agent` from current v0.11.x, then re-apply customizations from Modules 2, 4, 6, 7, 8, 9 in sequence. Roughly 1–2 hours of focused work; needs its own session because the diff against the current `calculus-agent/` will be substantial across most of the project's surface area.
-
-Either file as its own GitHub issue (and unblock Phase 4 around it), or defer until after Phases 4+5 complete and bundle with whatever else turns up. Detail and rationale in `findings/03-phase3-modules-0-9.md` (F9, F10 sections).
-
-### 3. [#30 — File upstream issues](https://github.com/fips-agents/examples/issues/30)
+### 2. [#30 — File upstream issues](https://github.com/fips-agents/examples/issues/30)
 
 Original five drafts (against `meta-llama/llama-stack` and `ogx-ai/ogx-k8s-operator`) still pending. Two new llm-d drafts added in Phase 0:
 
@@ -49,9 +36,9 @@ Open question: file the llm-d drafts under #30 (broaden its scope) or open a sib
 
 Filing happens in its own session — research each upstream's CONTRIBUTING / issue-template first.
 
-### 4. [#29 — Human walkthrough](https://github.com/fips-agents/examples/issues/29) (blocked by #28)
+### 3. [#29 — Human walkthrough](https://github.com/fips-agents/examples/issues/29) (blocked by #28)
 
-Clean-room read-through for flow and clarity. Worth scheduling once Phases 4+5 of #28 are clean *and* the calculus-agent re-scaffold has landed — those two together close the doc/worked-example gap that #29 would otherwise trip over immediately.
+Clean-room read-through for flow and clarity. Worth scheduling once Phases 4+5 of #28 land — the calculus-agent re-scaffold this session already closed the worked-example gap that would otherwise have tripped #29 immediately.
 
 ## What landed this session
 
@@ -62,8 +49,11 @@ Clean-room read-through for flow and clarity. Worth scheduling once Phases 4+5 o
 | `12672d3` | `docs: Update Modules 1/5/7/9 for v0.11.x scaffold + closed upstream issues (#28 phase 3)` |
 | `2a75cb4` | `docs: Surface unused fips-agents create subcommands on Where to Go Next (#28)` |
 | `c1efc56` | `docs: Switch Module 6 sandbox path to fips-agents create sandbox (F15, #28)` |
+| `62a0bd2` | `docs: Refresh NEXT_SESSION.md after Phases 1–3 of #28` |
+| `279312a` | `build: Anchor .claude/ gitignore rule to repo root` |
+| `2e37e3c` | `refactor: Re-scaffold calculus-agent from v0.11.1 template (F9, F10, #28)` |
 
-Phase 1 had no doc edits (clean). Phase 2 touched 3 setup guides (`cluster-options`, `install-cli-tools`, `install-openshift-ai`). Phase 3 + follow-ups touched 5 module/page files (`01-scaffold-agent`, `05-gateway-and-ui`, `06-code-sandbox`, `07-extend-with-ai`, `09-file-uploads`, `where-next`).
+Phase 1 had no doc edits (clean). Phase 2 touched 3 setup guides (`cluster-options`, `install-cli-tools`, `install-openshift-ai`). Phase 3 + follow-ups touched 6 module/page files (`01-scaffold-agent`, `05-gateway-and-ui`, `06-code-sandbox`, `07-extend-with-ai`, `09-file-uploads`, `where-next`). The re-scaffold touched 23 files inside `calculus-agent/`, plus `.gitignore` (the prep that lets `.claude/commands/` actually commit).
 
 ## Cluster state — `cluster-hpdl7-sandbox2435` (context: `kagenti-memory-hub`)
 
