@@ -46,13 +46,12 @@ somehow bypasses the import hook, it cannot reach external services.
 
 ## Build the sandbox image
 
-The sandbox is maintained as its own project at
-[fips-agents/code-sandbox](https://github.com/fips-agents/code-sandbox).
-Clone it and build the image into your `calculus-agent` namespace via
-BuildConfig — same pattern as the agent and the MCP server:
+Scaffold a sandbox project the same way you scaffolded the agent, MCP
+server, gateway, and UI, then build the image into your `calculus-agent`
+namespace via BuildConfig:
 
 ```bash
-gh repo clone fips-agents/code-sandbox
+fips-agents create sandbox code-sandbox --local --yes
 cd code-sandbox
 
 oc new-build --binary --name=code-sandbox --strategy=docker \
@@ -63,6 +62,13 @@ oc patch bc/code-sandbox --type=json \
 oc start-build code-sandbox --from-dir=. --follow \
   -n calculus-agent --context="$CTX"
 ```
+
+The scaffold produces the same project as
+[fips-agents/code-sandbox](https://github.com/fips-agents/code-sandbox)
+upstream — same FastAPI sidecar, same `/execute` shape, same four
+security layers. If you'd rather clone the repo directly (e.g., to track
+upstream security fixes with `git pull`), `gh repo clone fips-agents/code-sandbox && cd code-sandbox`
+works identically from this point.
 
 The build takes 2–3 minutes and pushes
 `image-registry.openshift-image-registry.svc:5000/calculus-agent/code-sandbox:latest`
