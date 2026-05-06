@@ -1,0 +1,30 @@
+apiVersion: llamastack.io/v1alpha1
+kind: LlamaStackDistribution
+metadata:
+  name: ogx
+  namespace: ogx
+spec:
+  replicas: 1
+  server:
+    distribution:
+      name: starter
+    userConfig:
+      configMapName: ogx-config
+    containerSpec:
+      port: 8321
+      env:
+        - name: VLLM_URL
+          value: "http://gpt-oss-predictor.gpt-oss-model.svc.cluster.local:8000/v1"
+        - name: VLLM_INFERENCE_MODEL
+          value: "RedHatAI/gpt-oss-20b"
+        - name: VLLM_MAX_TOKENS
+          value: "4096"
+        - name: VLLM_API_TOKEN
+          value: "fake"
+    storage:
+      size: "20Gi"
+      mountPath: "/home/lls/.lls"
+  network:
+    allowedFrom:
+      namespaces:
+        - "*"

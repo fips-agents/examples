@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ogx-config
+  namespace: ogx
+data:
+  config.yaml: |
+    version: 2
+    image_name: tutorial
+    apis:
+      - inference
+      - tool_runtime
+    providers:
+      inference:
+        - provider_id: vllm
+          provider_type: remote::vllm
+          config:
+            base_url: ${env.VLLM_URL:=}
+            max_tokens: ${env.VLLM_MAX_TOKENS:=4096}
+            api_token: ${env.VLLM_API_TOKEN:=fake}
+    registered_resources:
+      models:
+        - model_id: ${env.VLLM_INFERENCE_MODEL}
+          provider_id: vllm
+          model_type: llm
+      shields: []
+      tool_groups: []
+    server:
+      port: 8321
