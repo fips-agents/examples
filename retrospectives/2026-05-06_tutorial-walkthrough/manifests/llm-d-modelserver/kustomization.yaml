@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# llm-d optimized-baseline model server, pinned to upstream main at:
+# bbf2654c780b63e105c03408822ed9bcc694bca2
+#
+# Default upstream config is 8 replicas of Qwen3-32B at TP=2 (16 GPUs total).
+# This overlay scales it down for a single-L40S validation: 1 replica, TP=1,
+# Qwen3-0.6B as the model (smallest in family, fastest to pull).
+resources:
+  - github.com/llm-d/llm-d/guides/optimized-baseline/modelserver/gpu/vllm?ref=bbf2654c780b63e105c03408822ed9bcc694bca2
+
+patches:
+  - path: patch-decode.yaml

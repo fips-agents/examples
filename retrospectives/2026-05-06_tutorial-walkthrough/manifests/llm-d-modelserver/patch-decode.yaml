@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decode
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: modelserver
+          args:
+            - "Qwen/Qwen3-0.6B"
+            - "--disable-access-log-for-endpoints=/health,/metrics,/v1/models"
+            - "--tensor-parallel-size=1"
+          # OpenShift's restricted-v2 SCC assigns an arbitrary high UID. The
+          # vanilla vllm/vllm-openai image hardcodes cache paths at filesystem
+          # root (/.config, /.triton) which a non-root user cannot write to.
+          # Mount writable emptyDirs to those paths. This is in addition to the
+          # /.cache mount that ships in the upstream overlay.
+          volumeMounts:
+            - mountPath: /.config
+              name: vllm-config
+            - mountPath: /.triton
+              name: triton-cache
+          resources:
+            limits:
+              cpu: '8'
+              memory: 32Gi
+              nvidia.com/gpu: 1
+            requests:
+              cpu: '4'
+              memory: 16Gi
+              nvidia.com/gpu: 1
+      volumes:
+        - name: vllm-config
+          emptyDir: {}
+        - name: triton-cache
+          emptyDir: {}
