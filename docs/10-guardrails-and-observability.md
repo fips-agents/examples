@@ -43,7 +43,7 @@ Tracing comes along for the ride: OGX emits OpenTelemetry spans for inference, M
 
 Three setup guides bring the cluster up to readiness. Run them in order, then come back here:
 
-1. **[Install OGX](guides/install-ogx.md)** — Operator + `OGXDistribution` pointing at your existing vLLM. Exports `OGX_ENDPOINT`.
+1. **[Install OGX](guides/install-ogx.md)** — Operator + `LlamaStackDistribution` pointing at your existing vLLM. Exports `OGX_ENDPOINT`.
 2. **[Configure Safety Shields](guides/configure-shields.md)** — register at least one shield (the built-in `code-scanner` is enough for this module). Exports `OGX_SHIELD`.
 3. **[Observability Backends](guides/observability-backends.md)** — Jaeger receiver for OGX's OTLP exports. Exports `JAEGER_UI`.
 

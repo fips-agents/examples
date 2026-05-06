@@ -111,10 +111,10 @@ Open it in a browser. You should see the Jaeger UI with no services listed yet �
 
 OGX is in a different namespace, so use the cluster-internal DNS name. The OTLP HTTP endpoint is what OGX's `telemetry` provider expects.
 
-Edit the `OGXDistribution` from [Install OGX](install-ogx.md):
+Edit the `LlamaStackDistribution` from [Install OGX](install-ogx.md):
 
 ```bash
-oc edit ogxdistribution ogx -n ogx
+oc edit llamastackdistribution ogx -n ogx
 ```
 
 Add or update the `OTEL_EXPORTER_OTLP_ENDPOINT` env var under `spec.server.containerSpec.env`:
@@ -143,8 +143,9 @@ Hit OGX's `/v1/chat/completions` to generate a span:
 curl -s "$OGX_ENDPOINT/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "ibm-granite/granite-3.3-8b-instruct",
-    "messages": [{"role": "user", "content": "Say hi."}]
+    "model": "vllm/RedHatAI/gpt-oss-20b",
+    "messages": [{"role": "user", "content": "Say hi."}],
+    "max_tokens": 300
   }' > /dev/null
 ```
 
@@ -169,7 +170,7 @@ You need two things from your platform team:
 | OTLP endpoint URL | `http://collector.<ns>.svc.cluster.local:4318` | HTTP receiver port |
 | Trace UI URL | varies | Tempo, Grafana Tempo datasource, Datadog APM, etc. |
 
-Set `OTEL_EXPORTER_OTLP_ENDPOINT` on the `OGXDistribution` to the collector URL. The trace UI is whatever your platform team gives you — Module 10's "go find your trace" step works the same whether you're looking at Jaeger or Tempo.
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` on the `LlamaStackDistribution` to the collector URL. The trace UI is whatever your platform team gives you — Module 10's "go find your trace" step works the same whether you're looking at Jaeger or Tempo.
 
 If you're running OpenShift's [distributed tracing platform (Tempo)](https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/distributed_tracing/distributed-tracing-platform-tempo), the OTLP receiver is part of the `TempoStack` CR (look for `spec.template.distributor`).
 

@@ -44,15 +44,14 @@ enabled for model serving. RHOAI 3.x requires OpenShift 4.20+.
 
 → See [Install OpenShift AI](guides/install-openshift-ai.md).
 
-### 3. An LLM (Granite 3.3 8B Instruct)
+### 3. An LLM (RedHatAI/gpt-oss-20b)
 
-The tutorial uses **`ibm-granite/granite-3.3-8b-instruct`** served via
-vLLM. You need:
+The tutorial uses **`RedHatAI/gpt-oss-20b`** served via vLLM. You need:
 
 - An OpenAI-compatible endpoint URL (`MODEL_ENDPOINT`)
 - The model identifier (`MODEL_NAME`)
 
-**Path A:** deploy vLLM on your cluster (one ~24 GB GPU).
+**Path A:** deploy vLLM on your cluster (one ~24 GB GPU; the MXFP4-quantized variant fits in ~16 GB).
 **Path B:** use any external OpenAI-compatible URL.
 
 → See [Serve an LLM](guides/serve-an-llm.md). The Path B fallback is in the

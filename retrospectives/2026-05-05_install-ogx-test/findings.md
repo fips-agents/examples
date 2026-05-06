@@ -4,6 +4,17 @@ Cluster test of a corrected `install-ogx.md` draft against the kagenti-memory-hu
 
 **Outcome:** the verified draft was promoted to [`docs/guides/install-ogx.md`](../../docs/guides/install-ogx.md). The accompanying `serve-an-llm.md` was rewritten in the same iteration (gpt-oss-20b switch + RHOAI 3.x Headless URL caveat). Working manifests retained under `manifests/` for reference.
 
+**Wave 2 follow-up — `configure-shields.md`:** rewritten to extend the same `ogx-config` ConfigMap with `safety` API, `inline::code-scanner` provider, and a `code-scanner` shield. Path A (code-scanner) tested end-to-end on the cluster: `/v1/shields` returns the registered shield, `POST /v1/safety/run-shield` fires on `eval(input())` with `violation_type: "eval-with-expression,insecure-eval-use"` and returns null on benign content, chat completions through OGX still work. Path B (Llama Guard) was rewritten with the corrected vLLM patterns from `serve-an-llm.md` but **was not tested end-to-end** — the cluster has only one GPU and it's allocated to the gpt-oss-20b backend. Wave 2 manifest archived as `manifests/ogx-config-wave2.yaml`.
+
+**Sweep edits (consistency):** four other docs referenced the old `OGXDistribution` / granite-3.3-8b patterns and were updated in the same pass:
+
+- `docs/00-prerequisites.md` — switched section heading + body to gpt-oss-20b
+- `docs/10-guardrails-and-observability.md` — `OGXDistribution` → `LlamaStackDistribution` in the prereq list
+- `docs/11-scaling-with-llm-d.md` — same rename in the A/B-test paragraph
+- `docs/guides/observability-backends.md` — three replacements (`OGXDistribution` → `LlamaStackDistribution`, `oc edit ogxdistribution` → `oc edit llamastackdistribution`, granite model name → `vllm/RedHatAI/gpt-oss-20b` plus `max_tokens` so the reasoning trace doesn't truncate)
+
+**Known follow-up — `observability-backends.md` needs Wave-2-style treatment.** The doc currently shows enabling telemetry by adding `OTEL_EXPORTER_OTLP_ENDPOINT` as an env var on the `LlamaStackDistribution`, but our Wave 1 / Wave 2 ConfigMaps don't include the `telemetry` API or `providers.telemetry` block — so the env var alone won't wire OTLP through. A future pass should extend the `ogx-config` ConfigMap with `telemetry` similar to how Wave 2 added `safety`, and have observability-backends.md replace the ConfigMap rather than (or in addition to) editing the LSD CR. Not done in this iteration.
+
 ## Summary of drift caught beyond what `workshop-setup-ogx` already documents
 
 ### 1. Wave 1 ("no userConfig") is not viable for tutorial use
