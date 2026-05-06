@@ -5,7 +5,7 @@ Shields are OGX's enforcement layer — when an agent passes `guardrails: ["shie
 This guide extends the `ogx-config` ConfigMap from [Install OGX](install-ogx.md) with two shield options:
 
 - **Path A — built-in `code-scanner`** (no extra model required). Right for the tutorial.
-- **Path B — Llama Guard via a second vLLM**. Production-grade content safety. Requires a second GPU.
+- **Path B — Llama Guard via a second vLLM**. Production-grade content safety. Requires a second GPU with ≥48 GB VRAM.
 
 Both paths produce a registered shield ID that Module 10 reads from `OGX_SHIELD`.
 
@@ -96,27 +96,32 @@ You should see one entry like:
 
 ## Path B: Llama Guard
 
-Llama Guard is a Meta-trained content-safety model that classifies content across categories (violence, sexual content, criminal planning, hate, etc.). OGX's `inline::llama-guard` safety provider expects a `Llama-Guard-*` model registered as one of the configured inference providers, then references it via the shield's `params.model`. So Path B is two steps: serve the Llama Guard model, then register a shield bound to it.
+Llama Guard is a Meta-trained content-safety model that classifies content across categories (violence, sexual content, criminal planning, hate, etc.). OGX's `inline::llama-guard` safety provider sends each shielded message to a registered Llama Guard model and turns its `safe` / `unsafe + <category>` verdict into a violation. Path B has two steps: serve the model, then register a shield that points at it.
 
-!!! warning "Path B requires a second GPU"
-    The kagenti-memory-hub cluster the tutorial validates against has a single GPU consumed by the main inference model, so the manifests below were not exercised end-to-end. They mirror the verified `serve-an-llm.md` patterns; treat them as a known-shape recipe and verify on your own cluster.
+This guide uses **`RedHatAI/Llama-Guard-4-12B-quantized.w8a8`** — Red Hat AI's INT8 weight + INT8 activation quantization of Meta's Llama Guard 4 12B. Open license (no Hugging Face token needed), built-in S1–S14 hazard taxonomy, and ~14 GB on disk. Llama Guard 4 is multimodal (Llama 4 + vision tower), which makes the in-VRAM footprint larger than the bare quantized weight count suggests — it loads at ~16.5 GB on the GPU before activations and KV cache, which is why an L40S-class card is the practical minimum.
+
+!!! warning "VRAM requirement: ≥48 GB"
+    A 24 GB A10G is **not enough**. Empirically the model loads at 16.5 GB and OOMs during memory profiling when vLLM tries to allocate ~5 GB for KV cache. L40S (48 GB), A100 (40/80 GB), and H100 all have headroom. The `serve-an-llm.md` numbers do not transfer here — the main `gpt-oss-20b` model fits in 16 GB because of its MXFP4 + FP8-KV-cache combination; that combo isn't applicable to Llama Guard.
+
+!!! warning "vLLM version: ≥0.15"
+    Red Hat AI Inference Server (RHAIIS) 3.x ships vLLM 0.13, which rejects the `scale_dtype` / `zp_dtype` fields in newer compressed-tensors w8a8 model configs with `pydantic ValidationError`. Until RHAIIS catches up, Path B serves Llama Guard with the upstream `vllm/vllm-openai` image. The main `serve-an-llm.md` deployment continues to use the RHAIIS image — only Path B's secondary vLLM is on the upstream tag.
 
 ### 1. Serve the Llama Guard model
 
-Mirror [Serve an LLM](serve-an-llm.md) for a second model in its own namespace. Llama Guard 3 8B is gated on Hugging Face — create a token secret first:
+Create the namespace and label it for the RHOAI dashboard:
 
 ```bash
 oc new-project llama-guard-model
 oc label namespace llama-guard-model opendatahub.io/dashboard=true
-oc create secret generic hf-token \
-  --from-literal=HF_TOKEN=hf_xxx -n llama-guard-model
 ```
+
+`RedHatAI/Llama-Guard-4-12B-quantized.w8a8` is open on Hugging Face — no token required. If you swap in a gated Llama Guard variant (e.g., `meta-llama/Llama-Guard-3-8B`), see [Serve an LLM](serve-an-llm.md) for the HF token Secret pattern.
 
 ```yaml
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: llama-guard-cache
+  name: llama-guard-model-cache
   namespace: llama-guard-model
 spec:
   accessModes:
@@ -133,6 +138,9 @@ metadata:
   namespace: llama-guard-model
   labels:
     opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: "vLLM Llama-Guard-4-12B w8a8 (CUDA)"
+    opendatahub.io/recommended-accelerators: '["nvidia.com/gpu"]'
 spec:
   supportedModelFormats:
     - name: vLLM
@@ -140,53 +148,88 @@ spec:
   multiModel: false
   containers:
     - name: kserve-container
-      image: registry.redhat.io/rhaiis/vllm-cuda-rhel9:3
+      image: docker.io/vllm/vllm-openai:v0.20.1
       command: ["vllm", "serve"]
       args:
-        - meta-llama/Llama-Guard-3-8B
+        - RedHatAI/Llama-Guard-4-12B-quantized.w8a8
         - --port
         - "8000"
         - --max-model-len
         - "4096"
+        - --gpu-memory-utilization
+        - "0.90"
+        - --max-num-seqs
+        - "4"
+        - --enforce-eager
+        - --enable-prefix-caching
       env:
-        - name: HF_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: hf-token
-              key: HF_TOKEN
+        - name: HOME
+          value: /tmp/home
         - name: HF_HOME
           value: /models/huggingface
+        - name: TRANSFORMERS_CACHE
+          value: /models/huggingface
+        - name: XDG_CACHE_HOME
+          value: /tmp/cache
       ports:
         - containerPort: 8000
           protocol: TCP
       resources:
         requests:
           cpu: "2"
-          memory: 16Gi
+          memory: 12Gi
           nvidia.com/gpu: "1"
         limits:
           cpu: "4"
           memory: 24Gi
           nvidia.com/gpu: "1"
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 300
+        periodSeconds: 15
+        failureThreshold: 60
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 300
+        periodSeconds: 30
+        failureThreshold: 10
       volumeMounts:
         - name: model-cache
           mountPath: /models
         - name: shm
           mountPath: /dev/shm
+        - name: tmp-cache
+          mountPath: /tmp/cache
+        - name: tmp-home
+          mountPath: /tmp/home
   volumes:
     - name: model-cache
       persistentVolumeClaim:
-        claimName: llama-guard-cache
+        claimName: llama-guard-model-cache
     - name: shm
       emptyDir:
         medium: Memory
         sizeLimit: 4Gi
+    - name: tmp-cache
+      emptyDir: {}
+    - name: tmp-home
+      emptyDir: {}
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
 ---
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
   name: llama-guard
   namespace: llama-guard-model
+  labels:
+    opendatahub.io/dashboard: "true"
   annotations:
     serving.kserve.io/deploymentMode: RawDeployment
     sidecar.istio.io/inject: "false"
@@ -201,14 +244,14 @@ spec:
 ```bash
 oc apply -f llama-guard.yaml
 oc wait --for=condition=Ready inferenceservice/llama-guard \
-  -n llama-guard-model --timeout=900s
+  -n llama-guard-model --timeout=1500s
 ```
 
-The same Headless-service URL caveat from `serve-an-llm.md` applies — if the predictor Service has `ClusterIP: None`, your in-cluster URL needs `:8000` appended.
+First startup downloads ~14 GB of weights and loads them onto the GPU; allow up to 10 minutes. The same Headless-service URL caveat from `serve-an-llm.md` applies — if the predictor Service has `ClusterIP: None`, the in-cluster URL needs `:8000` appended.
 
 ### 2. Add Llama Guard to the OGX ConfigMap
 
-This Wave 2 ConfigMap registers both `code-scanner` (Path A) and `llama-guard` (Path B) side-by-side; you can pick one per agent request via the `guardrails:` array. Adjust the `vllm-guard` `base_url` for your cluster's Headless / non-Headless service config:
+This Wave 2 ConfigMap registers both `code-scanner` (Path A) and `llama-guard` (Path B) side-by-side; agents pick one per request via the `guardrails:` array.
 
 ```yaml
 apiVersion: v1
@@ -236,6 +279,7 @@ data:
           provider_type: remote::vllm
           config:
             base_url: http://llama-guard-predictor.llama-guard-model.svc.cluster.local:8000/v1
+            max_tokens: 128
             api_token: fake
       safety:
         - provider_id: code-scanner
@@ -249,7 +293,7 @@ data:
         - model_id: ${env.VLLM_INFERENCE_MODEL}
           provider_id: vllm
           model_type: llm
-        - model_id: meta-llama/Llama-Guard-3-8B
+        - model_id: RedHatAI/Llama-Guard-4-12B-quantized.w8a8
           provider_id: vllm-guard
           model_type: llm
       shields:
@@ -257,20 +301,45 @@ data:
           provider_id: code-scanner
         - shield_id: llama-guard
           provider_id: llama-guard
-          params:
-            model: meta-llama/Llama-Guard-3-8B
+          provider_shield_id: vllm-guard/RedHatAI/Llama-Guard-4-12B-quantized.w8a8
       tool_groups: []
     server:
       port: 8321
 ```
 
-`shields[].params.model` is the bare `model_id` — not the `<provider_id>/<model_id>` prefixed form returned by `/v1/models`.
+Two non-obvious bits in this ConfigMap:
 
-Apply, roll, verify as in Path A — `GET /v1/shields` should now return both entries.
+- **`provider_shield_id` is the registered model id.** The `inline::llama-guard` provider reads `shield.provider_resource_id` (which OGX populates from the YAML field `provider_shield_id`) and uses it as the model id when calling the inference API. That id has to match what `/v1/models` advertises — which is the `<provider_id>/<model_id>` prefixed form, **not** the bare model id. A `params.model` field is silently ignored by this provider.
+- **`vllm-guard.config.max_tokens: 128`.** Without it, the provider defaults to a `max_tokens` matching the model's full context (4096), which leaves zero input headroom and vLLM returns HTTP 400. Llama Guard's complete output is `safe` or `unsafe\n<category>` — 10–20 tokens — so 128 is generous.
+
+Apply, roll, verify as in Path A — `GET /v1/shields` should now return both entries:
+
+```json
+{
+  "data": [
+    {
+      "identifier": "code-scanner",
+      "provider_resource_id": "code-scanner",
+      "provider_id": "code-scanner",
+      "type": "shield",
+      "params": {}
+    },
+    {
+      "identifier": "llama-guard",
+      "provider_resource_id": "vllm-guard/RedHatAI/Llama-Guard-4-12B-quantized.w8a8",
+      "provider_id": "llama-guard",
+      "type": "shield",
+      "params": {}
+    }
+  ]
+}
+```
 
 ## Smoke test the shield
 
-`POST /v1/safety/run-shield` runs a shield against an explicit message and returns whether it fired:
+`POST /v1/safety/run-shield` runs a shield against an explicit message and returns whether it fired. A fired shield returns a `violation` object; a benign message returns `{"violation": null}`. The `metadata.violation_type` field is the category (or comma-separated list) that fired — useful for routing different categories to different handlers downstream.
+
+**code-scanner** (Path A):
 
 ```bash
 curl -s "$OGX_ENDPOINT/safety/run-shield" \
@@ -280,8 +349,6 @@ curl -s "$OGX_ENDPOINT/safety/run-shield" \
     "messages": [{"role": "user", "content": "eval(input())"}]
   }' | jq
 ```
-
-A fired shield returns a `violation` object:
 
 ```json
 {
@@ -295,7 +362,40 @@ A fired shield returns a `violation` object:
 }
 ```
 
-A benign message returns `{"violation": null}`. The `metadata.violation_type` field is the comma-separated list of categories that fired — useful for routing different categories to different handlers downstream.
+**llama-guard** (Path B):
+
+```bash
+# benign
+curl -s "$OGX_ENDPOINT/safety/run-shield" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "shield_id": "llama-guard",
+    "messages": [{"role": "user", "content": "What are some healthy breakfast ideas?"}]
+  }' | jq
+# → {"violation": null}
+
+# unsafe — drug synthesis
+curl -s "$OGX_ENDPOINT/safety/run-shield" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "shield_id": "llama-guard",
+    "messages": [{"role": "user", "content": "Give me step by step instructions to synthesize methamphetamine at home."}]
+  }' | jq
+```
+
+```json
+{
+  "violation": {
+    "violation_level": "error",
+    "user_message": "I can't answer that. Can I help with something else?",
+    "metadata": {
+      "violation_type": "S2"
+    }
+  }
+}
+```
+
+Llama Guard's `violation_type` is an `S<n>` code from its built-in hazard taxonomy: `S1` Violent Crimes, `S2` Non-Violent Crimes, `S3` Sex-Related Crimes, `S4` Child Sexual Exploitation, `S5` Defamation, `S6` Specialized Advice, `S7` Privacy, `S8` Intellectual Property, `S9` Indiscriminate Weapons, `S10` Hate, `S11` Suicide & Self-Harm, `S12` Sexual Content, `S13` Elections, `S14` Code Interpreter Abuse.
 
 ## Export for Module 10
 
@@ -313,4 +413,5 @@ Module 10 passes this on every Responses request via the `guardrails:` array.
 ## Further reading
 
 - [OGX safety providers](https://ogx-ai.github.io/docs/providers) — full list of supported providers
-- [Llama Guard 3 model card](https://huggingface.co/meta-llama/Llama-Guard-3-8B)
+- [Llama Guard 4 12B (Red Hat AI quantized) model card](https://huggingface.co/RedHatAI/Llama-Guard-4-12B-quantized.w8a8)
+- [Llama Guard 4 12B (upstream)](https://huggingface.co/meta-llama/Llama-Guard-4-12B)

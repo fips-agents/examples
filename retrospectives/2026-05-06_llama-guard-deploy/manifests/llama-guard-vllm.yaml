@@ -1,0 +1,133 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-guard-model
+  labels:
+    opendatahub.io/dashboard: "true"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: llama-guard-model-cache
+  namespace: llama-guard-model
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3-csi
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: vllm-llama-guard-runtime
+  namespace: llama-guard-model
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: "vLLM Llama-Guard-4-12B w8a8 (CUDA)"
+    opendatahub.io/recommended-accelerators: '["nvidia.com/gpu"]'
+spec:
+  supportedModelFormats:
+    - name: vLLM
+      autoSelect: true
+  multiModel: false
+  containers:
+    - name: kserve-container
+      image: docker.io/vllm/vllm-openai:v0.20.1
+      command: ["vllm", "serve"]
+      args:
+        - RedHatAI/Llama-Guard-4-12B-quantized.w8a8
+        - --port
+        - "8000"
+        - --max-model-len
+        - "4096"
+        - --gpu-memory-utilization
+        - "0.90"
+        - --max-num-seqs
+        - "4"
+        - --enforce-eager
+        - --enable-prefix-caching
+      env:
+        - name: HOME
+          value: /tmp/home
+        - name: HF_HOME
+          value: /models/huggingface
+        - name: TRANSFORMERS_CACHE
+          value: /models/huggingface
+        - name: VLLM_CACHE_DIR
+          value: /models/vllm-cache
+        - name: XDG_CACHE_HOME
+          value: /tmp/cache
+        - name: HF_HUB_OFFLINE
+          value: "0"
+      ports:
+        - containerPort: 8000
+          protocol: TCP
+      resources:
+        requests:
+          cpu: "2"
+          memory: 12Gi
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "4"
+          memory: 24Gi
+          nvidia.com/gpu: "1"
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 300
+        periodSeconds: 15
+        failureThreshold: 60
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 300
+        periodSeconds: 30
+        failureThreshold: 10
+      volumeMounts:
+        - name: model-cache
+          mountPath: /models
+        - name: shm
+          mountPath: /dev/shm
+        - name: tmp-cache
+          mountPath: /tmp/cache
+        - name: tmp-home
+          mountPath: /tmp/home
+  volumes:
+    - name: model-cache
+      persistentVolumeClaim:
+        claimName: llama-guard-model-cache
+    - name: shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 4Gi
+    - name: tmp-cache
+      emptyDir: {}
+    - name: tmp-home
+      emptyDir: {}
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-guard
+  namespace: llama-guard-model
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+    sidecar.istio.io/inject: "false"
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: vLLM
+      runtime: vllm-llama-guard-runtime

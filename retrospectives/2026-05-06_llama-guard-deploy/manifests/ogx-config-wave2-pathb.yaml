@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ogx-config
+  namespace: ogx
+data:
+  config.yaml: |
+    version: 2
+    image_name: tutorial
+    apis:
+      - inference
+      - safety
+      - tool_runtime
+    providers:
+      inference:
+        - provider_id: vllm
+          provider_type: remote::vllm
+          config:
+            base_url: ${env.VLLM_URL:=}
+            max_tokens: ${env.VLLM_MAX_TOKENS:=4096}
+            api_token: ${env.VLLM_API_TOKEN:=fake}
+        - provider_id: vllm-guard
+          provider_type: remote::vllm
+          config:
+            base_url: http://llama-guard-predictor.llama-guard-model.svc.cluster.local:8000/v1
+            max_tokens: 128
+            api_token: fake
+      safety:
+        - provider_id: code-scanner
+          provider_type: inline::code-scanner
+          config: {}
+        - provider_id: llama-guard
+          provider_type: inline::llama-guard
+          config: {}
+    registered_resources:
+      models:
+        - model_id: ${env.VLLM_INFERENCE_MODEL}
+          provider_id: vllm
+          model_type: llm
+        - model_id: RedHatAI/Llama-Guard-4-12B-quantized.w8a8
+          provider_id: vllm-guard
+          model_type: llm
+      shields:
+        - shield_id: code-scanner
+          provider_id: code-scanner
+        - shield_id: llama-guard
+          provider_id: llama-guard
+          provider_shield_id: vllm-guard/RedHatAI/Llama-Guard-4-12B-quantized.w8a8
+      tool_groups: []
+    server:
+      port: 8321
