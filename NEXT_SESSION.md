@@ -15,7 +15,7 @@ Tutorial content is complete (12 modules + setup + reference) plus the closing *
 | 2 (setup guides) | done | RHOAI 3.2→3.3 version pin, DSC YAML rewrite, dashboard-via-Gateway-API verify command, helm 4 |
 | 3 (Modules 0–9) | done | 5 trivial edits + 1 paragraph rewrite + Module 6 sandbox swap; calculus-agent re-scaffolded from v0.11.1, F9+F10 resolved |
 | 4 (Module 10) | done | Substrate gap surfaced + fixed: `configure-shields.md` Wave 2 now enables `responses` API + deps + `default_shield_id`. `/v1/responses` and `/v1/moderations` verified end-to-end. Agent-side claims (`call_model_responses` signature, `PlatformResponse` fields) still need a deployed Module 10 worked example to verify |
-| 5 (Module 11) | done (audit) | Cleanest pass — only finding (F22) is a small OpenShift SCC caveat in "Getting started"; deferred to chain onto #30 (file llm-d/llm-d upstream issue first, then update Module 11 to point at the filed issue) |
+| 5 (Module 11) | done | F22 closed inline after llm-d/llm-d#1430 filed: Module 11 "Getting started" carries an OpenShift caveat pointing at the upstream issue plus the in-repo overlay |
 
 Per-phase findings under `retrospectives/2026-05-06_tutorial-walkthrough/findings/0[0-5]-*.md`.
 
@@ -23,16 +23,21 @@ Per-phase findings under `retrospectives/2026-05-06_tutorial-walkthrough/finding
 
 ### 1. [#30 — File upstream issues](https://github.com/fips-agents/examples/issues/30)
 
-Now top of the list — Phase 5's F22 chains onto this work, and the audit pass is otherwise complete. Backlog:
+Two llm-d drafts filed this session (Tier A). Backlog from here:
 
-- Original five drafts (against `meta-llama/llama-stack` and `ogx-ai/ogx-k8s-operator`) still pending.
-- `findings/upstream-llm-d-doc-drift.md` — README on `main` references guides not present in tag `v0.6.0`.
-- `findings/upstream-llm-d-openshift-scc.md` — optimized-baseline manifests CrashLoopBackOff on OpenShift's `restricted-v2` SCC. **Filing this is the F22 dependency** — once landed upstream, point `docs/11-scaling-with-llm-d.md`'s "Getting started" section at the filed issue with a one-paragraph note. F22 detail in `findings/05-phase5-module-11.md`.
-- One additional curiosity surfaced in Phase 4 worth confirming/filing: OGX's `code-scanner` shield refusal stringifies the comma-separated `violation_type` character-by-character (`(violation type: e, v, a, l, …)` instead of `(violation type: eval-with-expression, insecure-eval-use)`). Looks like an upstream LlamaStack bug; mentioned in `findings/04-phase4-module-10.md`.
+**Filed:**
 
-Open question (unchanged): file the llm-d drafts under #30 (broaden its scope) or open a sibling tracking issue specifically for `llm-d/llm-d`?
+- ✅ [llm-d/llm-d#1429](https://github.com/llm-d/llm-d/issues/1429) — README on `main` references guides not present in tag `v0.6.0` (filed 2026-05-06).
+- ✅ [llm-d/llm-d#1430](https://github.com/llm-d/llm-d/issues/1430) — optimized-baseline manifests CrashLoopBackOff on OpenShift's `restricted-v2` SCC (filed 2026-05-06). **F22 closed** — `docs/11-scaling-with-llm-d.md` "Getting started" now carries an OpenShift caveat pointing at #1430.
 
-Filing happens in its own session — research each upstream's CONTRIBUTING / issue-template first. llm-d uses a Bug Report YAML template (no docs template) — the two existing drafts are pre-formatted for it.
+**Pending (Tier B + C — deferred to a follow-up session):**
+
+- Original five drafts at `/Users/wjackson/Developer/workshop-setup-ogx/docs/ogx-upstream-contributions.md` against `meta-llama/llama-stack`, `ogx-ai/ogx-k8s-operator`, and `ogx-ai/ogx-ai.github.io`. Two of the five (rename divergence, userConfig docs gap) need re-validation against current upstream state before filing — they were drafted 2026-05-05 and the OGX rename situation is moving. The `code-scanner` env-var gate (against `meta-llama/llama-stack`) and the `distribution.name: starter` rejection (against `ogx-ai/ogx-k8s-operator`) are clearly novel and ready to file with light prose tightening.
+- One additional curiosity surfaced in Phase 4 worth confirming/filing: OGX's `code-scanner` shield refusal stringifies the comma-separated `violation_type` character-by-character (`(violation type: e, v, a, l, …)` instead of `(violation type: eval-with-expression, insecure-eval-use)`). Likely an upstream LlamaStack bug. Needs a minimal reproducer before filing. Detail in `findings/04-phase4-module-10.md`.
+
+Open question (unchanged): #30 has been a tracking issue for ogx-targeted upstream filings; whether to broaden its scope to cover the llm-d filings (now #1429 + #1430) or treat llm-d as a sibling tracking concern.
+
+Filing tip from this session: the `triage` label specified in `llm-d/llm-d`'s bug.yml template isn't actually defined on the repo as a label — `gh issue create --label triage` errors. File with `--label bug` only; maintainers add triage labels themselves.
 
 ### 2. [#29 — Human walkthrough](https://github.com/fips-agents/examples/issues/29)
 
