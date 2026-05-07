@@ -6,3 +6,9 @@ site/
 # Local Claude Code agent state (scheduler locks, etc.) — root only,
 # so scaffolded sub-projects (calculus-agent/.claude/commands/, etc.) commit cleanly.
 /.claude/
+
+# Per-session scratch files — never committed, scratch space for the next
+# session. See ~/.claude/CLAUDE.md "Session scratch files belong in .gitignore".
+NEXT_SESSION.md
+RESUME.md
+TODO_NEXT.md
