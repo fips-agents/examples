@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-decode
+  namespace: llm-d-scc-test
+  labels:
+    test: scc-unpatched
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-decode
+  template:
+    metadata:
+      labels:
+        app: vllm-decode
+        test: scc-unpatched
+    spec:
+      containers:
+        - name: modelserver
+          image: docker.io/vllm/vllm-openai:v0.19.1
+          command: ["vllm", "serve"]
+          args:
+            - "Qwen/Qwen3-30B-A3B-Instruct-2507"
+            - "--tensor-parallel-size=2"
+            - "--disable-access-log-for-endpoints=/health,/metrics,/v1/models"
+            - "--host=0.0.0.0"
+            - "--port=8000"
+          env:
+            - name: HF_HOME
+              value: /cache/hf
+          resources:
+            limits:
+              cpu: '8'
+              memory: 64Gi
+              nvidia.com/gpu: 2
+            requests:
+              cpu: '4'
+              memory: 32Gi
+              nvidia.com/gpu: 2
+          ports:
+            - containerPort: 8000
+          # UNPATCHED — this is the upstream optimized-baseline patch-vllm.yaml mount set,
+          # missing /.triton (fatal under restricted-v2 SCC) and /.config (non-fatal but log-noisy)
+          volumeMounts:
+            - mountPath: /dev/shm
+              name: shm
+            - mountPath: /.cache
+              name: torch-compile-cache
+            - mountPath: /cache/hf
+              name: hf-cache
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 600
+            periodSeconds: 15
+            failureThreshold: 60
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 20Gi
+        - name: torch-compile-cache
+          emptyDir: {}
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: hf-cache
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
