@@ -4,6 +4,7 @@
 **Template:** Bug Report (`.github/ISSUE_TEMPLATE/bug.yml` — closest fit; no docs template exists)
 **Filing status:** **filed 2026-05-06 as [llm-d/llm-d#1429](https://github.com/llm-d/llm-d/issues/1429).**
 **Filing notes:** The `triage` label specified by the bug.yml template doesn't exist on the repo as a defined label — `gh issue create --label triage` errored. Filed with `--label bug` only; maintainers will apply triage labels.
+**Maintainer response (2026-05-07):** robertgshaw2-redhat ack'd: *"thanks for pointing this out. we are in progress of doing a docs revamp and are about to release tagged 0.7. I will think through how to make this more clear."* Folded into the v0.7 release. No follow-up needed from our side.
 
 ---
 
