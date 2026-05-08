@@ -4,6 +4,7 @@
 **Cluster:** mcp-rhoai (`api-cluster-n7pd5-...sandbox5167...`); OpenShift 4.x with default `restricted-v2` SCC binding
 **Target upstream:** `llm-d/llm-d` issue [#1430](https://github.com/llm-d/llm-d/issues/1430), maintainer-invited PR
 **Goal:** prove that adding `/.triton` and `/.config` emptyDir mounts to `guides/optimized-baseline/modelserver/gpu/vllm/patch-vllm.yaml` fixes the OpenShift CrashLoopBackOff before opening the PR.
+**PR opened:** [llm-d/llm-d#1450](https://github.com/llm-d/llm-d/pull/1450) (2026-05-08, post-validation)
 
 ## Test setup
 
