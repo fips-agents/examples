@@ -13,6 +13,37 @@ The agent loop here is intentionally minimal — most of the differentiation liv
 - Pins `fipsagents>=0.22.0`, ahead of the tutorial's currently pinned version. This directory is forward-looking demo material, not part of the Module 1–9 sequence.
 - Production demo wiring (as of 2026-05-08): coordinator → `calculus-agent.course-v11.svc.cluster.local:8080` → `calculus-helper` MCP in `calculus-mcp` namespace → real sympy.
 
+## Demo dependencies
+
+The deployed demo (subagent-demo namespace on mcp-rhoai cluster) is **not self-contained** — it depends on three things outside this directory that must stay healthy:
+
+1. **`calculus-helper` MCP server in `calculus-mcp` namespace** — sympy backend the specialist uses for actual symbolic computation. If this namespace is reaped or the deployment scales to zero, the specialist silently regresses to model-knowledge hallucination (still produces an answer; the answer is no longer verified). No alerting on this; verify via `oc -n calculus-mcp get pods` before showing the demo.
+2. **`calculus-agent` in `course-v11` namespace** — the registered specialist. The coordinator delegates here via cluster-internal DNS (`calculus-agent.course-v11.svc.cluster.local:8080`). Don't redeploy or rename without updating `CALCULUS_SPECIALIST_URL` on the coordinator's ConfigMap.
+3. **Ministral 3 14B in `mistral-model` namespace** — the pinned coordinator model. Pinned via `MODEL_NAME=mistralai/Ministral-3-14B-Instruct-2512` and `MODEL_ENDPOINT=http://ministral-3-14b-instruct.mistral-model.svc.cluster.local/v1`. The coordinator deployment also has a `nodeSelector` constraining it to `node.kubernetes.io/instance-type=g6e.4xlarge` so it can never accidentally land on an eval-gpu node.
+
+Demo URL: https://ui-subagent-demo.apps.cluster-n7pd5.n7pd5.sandbox5167.opentlc.com
+
+Production helm install reference (the `--set` flags currently in effect):
+
+```bash
+helm upgrade --install --kube-context=mcp-rhoai -n subagent-demo calculus-coordinator ./chart/ \
+  --set image.repository=image-registry.openshift-image-registry.svc:5000/subagent-demo/calculus-coordinator \
+  --set image.tag=latest \
+  --set image.pullPolicy=Always \
+  --set route.enabled=true \
+  --set probes.enabled=true \
+  --set config.STORAGE_BACKEND=sqlite \
+  --set config.SESSIONS_ENABLED=false \
+  --set config.TRACES_ENABLED=false \
+  --set config.METRICS_ENABLED=false \
+  --set config.OPENAI_API_KEY=not-required \
+  --set config.CALCULUS_SPECIALIST_URL=http://calculus-agent.course-v11.svc.cluster.local:8080 \
+  --set config.MODEL_ENDPOINT=http://ministral-3-14b-instruct.mistral-model.svc.cluster.local/v1 \
+  --set config.MODEL_NAME=mistralai/Ministral-3-14B-Instruct-2512
+```
+
+`SESSIONS_ENABLED`/`TRACES_ENABLED`/`METRICS_ENABLED` are explicitly **off** because they currently drop subagent StreamEvents through the observer chain (agent-template#185). Re-enable once that's fixed and the events are pass-through.
+
 ## How the agent works
 
 This is an AI agent project built on the BaseAgent framework. By default, the agent runs as an OpenAI-compatible HTTP server on port 8080 (`/v1/chat/completions`, `/healthz`). Each incoming request creates a fresh agent instance, calls `setup()` → `step()` loop → `shutdown()`, and streams the response. See comments in `src/agent.py` for how to switch to batch mode if needed.

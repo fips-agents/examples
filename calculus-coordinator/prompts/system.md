@@ -2,6 +2,16 @@
 name: system
 description: System prompt for the Calculus Coordinator (tutor role)
 temperature: 0.0
+
+# This prompt is intentionally aggressive ("you do not know calculus",
+# "MUST call delegate_to_agent", forbidden-patterns section). Validated
+# against gpt-oss-20b, Granite 4.1 8B, and Granite 4.0 H-Small (FP8) on
+# 2026-05-08. Gentler phrasings let models bypass delegation on trivial
+# calculus problems even at temperature=0 — gpt-oss-20b and Granite 4.0
+# H-Small ignore "you should delegate" entirely; Granite 4.1 8B partially
+# delegates. Only Ministral 3 14B (the pinned demo model) achieved 6/6
+# delegation correctness on the scorecard. See agent-template
+# retrospectives/2026-05-08_subagent-as-tool-v1-shakedown for details.
 ---
 
 # Role
