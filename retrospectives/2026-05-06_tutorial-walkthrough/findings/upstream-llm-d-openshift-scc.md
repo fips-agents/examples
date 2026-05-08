@@ -4,6 +4,7 @@
 **Template:** Bug Report (`.github/ISSUE_TEMPLATE/bug.yml`)
 **Filing status:** **filed 2026-05-06 as [llm-d/llm-d#1430](https://github.com/llm-d/llm-d/issues/1430).** This filing unblocks F22 (the Module 11 OpenShift caveat) — `docs/11-scaling-with-llm-d.md` "Getting started" section can now reference #1430 as the canonical pointer.
 **PR submitted:** [llm-d/llm-d#1450](https://github.com/llm-d/llm-d/pull/1450) (2026-05-08), maintainer-invited per the issue thread. Validation evidence at `retrospectives/2026-05-06_llm-d-scc-pr-validation/`.
+**Resolution:** #1450 merged 2026-05-08 after reviewer-triggered nightly CI passed on their OCP clusters. #1430 auto-closed as completed.
 **Working diff in hand:** `retrospectives/2026-05-06_tutorial-walkthrough/manifests/llm-d-modelserver/patch-decode.yaml`
 
 ---
