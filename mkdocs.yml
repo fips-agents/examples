@@ -49,6 +49,8 @@ nav:
     - "10. Platform Mode and Guardrails": 10-guardrails-and-observability.md
     - "11. Scaling with llm-d": 11-scaling-with-llm-d.md
     - "Where to Go Next": where-next.md
+  - Supplementary:
+    - "Agent Memory with MemoryHub": supplementary/agent-memory.md
   - Setup Guides:
     - "Choosing a Cluster": guides/cluster-options.md
     - "Install OpenShift AI": guides/install-openshift-ai.md

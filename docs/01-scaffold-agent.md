@@ -335,8 +335,9 @@ text after rule and skill injection.
     On first start you'll see `MemoryHub config at .memoryhub.yaml has no
     server_url — memory disabled (set server_url to enable).` That's expected
     — the scaffold ships a stub `.memoryhub.yaml`, and the agent falls back
-    to `NullMemoryClient` cleanly. See `/add-memory` for wiring up real
-    memory later.
+    to `NullMemoryClient` cleanly. The core tutorial works without memory.
+    When you're ready to add cross-session recall, see
+    [Agent Memory with MemoryHub](supplementary/agent-memory.md).
 
 Stop the server with `Ctrl+C`.
 
