@@ -55,7 +55,10 @@ A handful of specs and projects are worth knowing about even if you don't deploy
 - **[MCP specification](reference/mcp-protocol.md)** — the protocol you've been using all along. The reference page in this tutorial covers the tutorial-relevant subset; the [official spec](https://modelcontextprotocol.io) covers the full surface.
 - **[Kuadrant MCP Gateway](https://github.com/Kuadrant/mcp-gateway)** — the gateway component Kagenti uses, but usable standalone if you want unified MCP ingress without the rest of the platform.
 - **[llm-d](https://llm-d.ai)** — covered conceptually in [Module 11](11-scaling-with-llm-d.md). Worth reading the project's own architecture docs before you decide you need it.
-- **More `fips-agents create` subcommands.** `fips-agents create --help` lists scaffolders this tutorial doesn't use directly: `workflow` (multi-step pipelines), `model-car` (ModelCar packaging for Hugging Face models), and `sandbox` (a code-execution sandbox template). Worth peeking at when you outgrow what the tutorial covers.
+- **Event-triggered agents** (fipsagents 0.24.0) — agents that react to webhooks, Kafka messages, Redis Streams, and cron schedules alongside the chat endpoint. Configure `server.event_sources` in `agent.yaml`. See `docs/architecture.md` in the agent-template repo.
+- **Subagent-as-tool** (fipsagents 0.22.0) — register peer agents under `subagents:` in `agent.yaml` and the framework auto-registers a `delegate_to_agent` tool. The `calculus-coordinator/` directory in this repo is a working demo.
+- **Session fork & revert** (fipsagents 0.24.0) — branch a conversation's message history via `POST /v1/sessions/{id}/fork` for exploratory dialog without losing the original thread.
+- **More `fips-agents create` subcommands.** `fips-agents create --help` lists scaffolders this tutorial doesn't use directly: `workflow` (multi-step pipelines with typed state), `model-car` (ModelCar packaging for Hugging Face models), and `sandbox` (a code-execution sandbox template). Worth peeking at when you outgrow what the tutorial covers.
 
 ## What this means for the tutorial
 

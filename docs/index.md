@@ -4,7 +4,7 @@ A hands-on tutorial that takes you from zero to a deployed AI agent system
 on **Red Hat AI**, using the [fips-agents](https://github.com/fips-agents)
 toolkit.
 
-This tutorial was last verified against **fipsagents v0.11.0** (April 2026).
+This tutorial was last verified against **fipsagents v0.11.0** (April 2026). The current release is **v0.24.0** (May 2026) — see [What's New Since v0.11](#whats-new-since-v011) for features available in newer versions.
 
 ## What is Red Hat AI?
 
@@ -80,3 +80,22 @@ you get stuck:
 
 - `calculus-agent/` -- the finished agent
 - `calculus-helper/` -- the finished MCP server
+
+## What's new since v0.11
+
+The tutorial's module sequence is stable at v0.11.0. Newer fipsagents releases add capabilities that slot into the same architecture without changing Modules 1–9. To use these, bump the version in your agent's `pyproject.toml` and consult `docs/architecture.md` in the [agent-template](https://github.com/fips-agents/agent-template) repo.
+
+| Version | Feature | What it adds |
+|---------|---------|-------------|
+| 0.20.0 | Image input | Multimodal message support in `astep_stream()` |
+| 0.21.0 | Platform mode | Delegate LLM orchestration to OGX server-side (Module 10 covers this) |
+| 0.22.0 | Subagent-as-tool | Register peer agents in `agent.yaml`, auto-get a `delegate_to_agent` tool |
+| 0.22.0 | Question tool | Structured questions from agent to operator with `ask_user` |
+| 0.23.0 | Session compaction | LLM-driven summarization of old messages on context overflow |
+| 0.23.0 | Doom-loop detection | Breaks stuck tool-call loops automatically |
+| 0.23.0 | Per-tool permissions | Allow/deny/ask gates on individual tool calls |
+| 0.24.0 | Event-triggered mode | React to webhooks, cron, Kafka, Redis — not just chat |
+| 0.24.0 | Session fork & revert | Branch conversation history for exploration |
+| 0.24.0 | OTEL trace fidelity | Configurable detail levels for trace replay |
+
+The `calculus-coordinator/` directory in this repo demonstrates subagent-as-tool (v0.22.0).
