@@ -4,7 +4,7 @@ A hands-on tutorial that takes you from zero to a deployed AI agent system
 on **Red Hat AI**, using the [fips-agents](https://github.com/fips-agents)
 toolkit.
 
-This tutorial was last verified against **fipsagents v0.11.0** (April 2026). The current release is **v0.24.0** (May 2026) — see [What's New Since v0.11](#whats-new-since-v011) for features available in newer versions.
+This tutorial was last verified against **fipsagents v0.11.0** (April 2026). The current release is **v0.26.0** (May 2026) — see [What's New Since v0.11](#whats-new-since-v011) for features available in newer versions.
 
 ## What is Red Hat AI?
 
@@ -97,5 +97,7 @@ The tutorial's module sequence is stable at v0.11.0. Newer fipsagents releases a
 | 0.24.0 | Event-triggered mode | React to webhooks, cron, Kafka, Redis — not just chat |
 | 0.24.0 | Session fork & revert | Branch conversation history for exploration |
 | 0.24.0 | OTEL trace fidelity | Configurable detail levels for trace replay |
+| 0.25.0 | Kafka/Redis sources | Event-triggered agents can consume Kafka topics and Redis Streams |
+| 0.26.0 | State recovery | Reducer-based checkpoint/replay for long-running agents |
 
 The `calculus-coordinator/` directory in this repo demonstrates subagent-as-tool (v0.22.0).
