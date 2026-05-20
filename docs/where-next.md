@@ -10,7 +10,7 @@ A few problems live one rung above the OGX-shaped platform you've built:
 
 - **Agent-to-agent (A2A) communication.** The tutorial's agent talks to *tools* (MCP) and to a *model* (via OGX). It does not talk to *other agents*. Multi-agent systems — where one agent delegates to another, or several specialists collaborate — need a different protocol surface.
 - **Workload identity and zero-trust.** Module 8 covers OpenShift Secrets and FIPS posture. It does not cover SPIFFE/SPIRE-style cryptographic identity for each agent and tool, or fine-grained authorization at the request level (which user is calling which tool through which agent, and is that allowed).
-- **Gateway-level policy across many MCP servers.** Module 5 deploys one MCP server behind one gateway. Production fleets run dozens of MCP servers and want a single ingress that enforces auth, rate limits, and routing across all of them.
+- **Gateway-level policy across many MCP servers.** Module 5 deploys one MCP server behind one gateway. Production fleets run dozens of MCP servers and want a single ingress that enforces auth, rate limits, and routing across all of them. The [MCP Gateway supplementary module](supplementary/mcp-gateway.md) covers the hands-on deployment of Kuadrant MCP Gateway for this use case (RHOAI 3.4+, Tech Preview).
 - **Multi-framework agent runtime.** This tutorial uses BaseAgent. Real organizations end up with LangGraph in one team, CrewAI in another, AutoGen in a third — and want one platform to deploy them all consistently.
 
 You can solve any of these on top of OGX with custom code. At a certain scale, "custom code" stops scaling, and a platform layer above OGX starts paying for itself.
@@ -53,7 +53,7 @@ A handful of specs and projects are worth knowing about even if you don't deploy
 
 - **[A2A protocol](https://google.github.io/A2A)** — the agent-to-agent communication spec. Read this before designing any multi-agent system, regardless of platform choice.
 - **[MCP specification](reference/mcp-protocol.md)** — the protocol you've been using all along. The reference page in this tutorial covers the tutorial-relevant subset; the [official spec](https://modelcontextprotocol.io) covers the full surface.
-- **[Kuadrant MCP Gateway](https://github.com/Kuadrant/mcp-gateway)** — the gateway component Kagenti uses, but usable standalone if you want unified MCP ingress without the rest of the platform.
+- **[Kuadrant MCP Gateway](https://github.com/Kuadrant/mcp-gateway)** — the gateway component Kagenti uses, but usable standalone if you want unified MCP ingress without the rest of the platform. The [MCP Gateway supplementary module](supplementary/mcp-gateway.md) walks through deploying it on RHOAI 3.4.
 - **[llm-d](https://llm-d.ai)** — covered conceptually in [Module 11](11-scaling-with-llm-d.md). Worth reading the project's own architecture docs before you decide you need it.
 - **Event-triggered agents** (fipsagents 0.24.0) — agents that react to webhooks, Kafka messages, Redis Streams, and cron schedules alongside the chat endpoint. Configure `server.event_sources` in `agent.yaml`. See `docs/architecture.md` in the agent-template repo.
 - **Subagent-as-tool** (fipsagents 0.22.0) — register peer agents under `subagents:` in `agent.yaml` and the framework auto-registers a `delegate_to_agent` tool. The `calculus-coordinator/` directory in this repo is a working demo.
@@ -63,5 +63,7 @@ A handful of specs and projects are worth knowing about even if you don't deploy
 ## What this means for the tutorial
 
 Nothing changes in what you've already built. The OGX-shaped architecture from Modules 1–11 is a complete system on its own — Kagenti is what you'd graduate *to*, not something you've been missing. The order in this tutorial (single agent + MCP + OGX, then llm-d when you outgrow one vLLM, then Kagenti when you outgrow one agent) reflects the order most teams hit these problems in production. Don't deploy a layer you don't yet need.
+
+If you want to explore the governance layer without the full Kagenti platform, the supplementary modules cover two RHOAI 3.4 features that address individual concerns from the list above: [Models as a Service](supplementary/maas-model-serving.md) for governed model access and [MCP Gateway](supplementary/mcp-gateway.md) for gateway-level MCP policy.
 
 If you build something with Kagenti on top of this tutorial's stack, that's exactly the kind of feedback issue the [`fips-agents/examples`](https://github.com/fips-agents/examples) tracker wants — what worked, what collided, what the docs should warn the next person about.

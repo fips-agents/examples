@@ -327,6 +327,13 @@ export OPENAI_API_KEY="..."
 
 The rest of the tutorial works identically — only the LLM lives elsewhere.
 
+### Path C: Models as a Service
+
+If your cluster runs RHOAI 3.4+, you can serve models through the MaaS
+gateway — centralized access with API keys, token-based quotas, and cost
+visibility. See the [Models as a Service](../supplementary/maas-model-serving.md)
+supplementary module after completing the core tutorial.
+
 ## Picking a different model
 
 `RedHatAI/gpt-oss-20b` is the reference because it's reasoning-capable

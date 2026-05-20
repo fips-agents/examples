@@ -51,6 +51,8 @@ nav:
     - "Where to Go Next": where-next.md
   - Supplementary:
     - "Agent Memory with MemoryHub": supplementary/agent-memory.md
+    - "Models as a Service": supplementary/maas-model-serving.md
+    - "MCP Gateway": supplementary/mcp-gateway.md
   - Setup Guides:
     - "Choosing a Cluster": guides/cluster-options.md
     - "Install OpenShift AI": guides/install-openshift-ai.md

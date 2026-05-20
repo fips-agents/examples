@@ -62,6 +62,18 @@ tools, and registry access — is its own module:
 | [10. Platform Mode and Guardrails](10-guardrails-and-observability.md) | Graduate tool orchestration, shields, and tracing to OGX server-side. Requires fipsagents 0.21+ |
 | [11. Scaling with llm-d](11-scaling-with-llm-d.md) | Conceptual: disaggregated prefill/decode + KV-cache routing behind OGX |
 
+### Supplementary modules
+
+These standalone modules extend the tutorial with RHOAI 3.4 platform features.
+They are independent of each other and can be completed in any order after the
+prerequisites listed in each module.
+
+| Module | What you'll do |
+|--------|----------------|
+| [Agent Memory with MemoryHub](supplementary/agent-memory.md) | Add cross-session memory via MemoryHub's MCP-based semantic store |
+| [Models as a Service](supplementary/maas-model-serving.md) | Deploy MaaS: subscription-based model governance, API key auth, token quotas, usage tracking (RHOAI 3.4+) |
+| [MCP Gateway](supplementary/mcp-gateway.md) | Deploy MCP Gateway: centralized tool access, auth, rate limiting across MCP servers (RHOAI 3.4+, Tech Preview) |
+
 ## Reference
 
 Deep-dive pages linked from the tutorial:

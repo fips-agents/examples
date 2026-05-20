@@ -18,6 +18,14 @@ for this tutorial but won't hurt if they're enabled.
 This tutorial targets **Red Hat OpenShift AI 3.x** via the `fast-3.x`
 channel (validated on 3.3.1). RHOAI 3.x requires OpenShift 4.19 or later.
 
+!!! tip "RHOAI 3.4 for supplementary modules"
+    The core tutorial (Modules 0-11) works on RHOAI 3.3+. The
+    [Models as a Service](../supplementary/maas-model-serving.md) and
+    [MCP Gateway](../supplementary/mcp-gateway.md) supplementary modules
+    require **RHOAI 3.4**, which GA'd on May 14, 2026. If you're on 3.3,
+    the `fast-3.x` channel will deliver 3.4 automatically — approve the
+    upgrade in OLM when prompted. No operator reinstall is needed.
+
 ## Install the operator
 
 From the OpenShift web console:
