@@ -7,10 +7,10 @@ models through a managed gateway with subscription-based quotas, API key
 authentication, and usage tracking. Developers get self-service API keys and
 hit a single OpenAI-compatible endpoint.
 
-This module walks through enabling MaaS on your cluster, publishing the same
-`RedHatAI/gpt-oss-20b` model you served in Path A, creating a subscription,
-and rewiring the calculus-agent to consume the model through the governed
-gateway.
+This module walks through deploying MaaS on your cluster, publishing a model,
+understanding the resources MaaS creates, building governance resources by
+hand, and rewiring the calculus-agent to consume the model through the
+governed gateway.
 
 !!! info "Prerequisites"
     - RHOAI 3.4 on OpenShift 4.19.9+
@@ -18,6 +18,7 @@ gateway.
     - [Serve an LLM](../guides/serve-an-llm.md) Path A completed (so you
       have direct vLLM to compare against)
     - `cluster-admin` access
+    - A GPU node (same requirements as Path A)
 
 ## What you will build
 
@@ -28,482 +29,369 @@ Current (Path A):
 
 After (MaaS):
 
-  Agent --> MaaS Gateway --> vLLM (or llm-d)
+  Agent --> MaaS Gateway --> llm-d (EPP) --> vLLM
                |
-               +-- Subscription (token quotas)
-               +-- AuthPolicy (group access)
-               +-- API key auth
+               +-- MaaSSubscription (token quotas)
+               +-- MaaSAuthPolicy (group access)
+               +-- API key auth (sk-oai-*)
 ```
 
 The agent code does not change. Only the endpoint URL and the addition of an
 API key differ.
 
-## Part 1: Install the prerequisite operators
+## Part 1: Deploy MaaS on your cluster
 
-MaaS requires Red Hat Connectivity Link, which in turn requires Limitador and
-Authorino v1.3+. If you are upgrading from RHOAI 3.3, the Authorino operator
-installed by RHOAI (v1.1.3 on the `tech-preview-v1` channel) is too old --
-you must replace it.
+MaaS requires several platform components: Red Hat Connectivity Link
+(Kuadrant, Authorino, Limitador), a PostgreSQL database for API key
+management, an API gateway with TLS, and dashboard configuration.
 
-### Install Limitador
+Follow the official Red Hat guide to deploy MaaS:
+
+**[Deploy and manage Models-as-a-Service](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/deploy-and-manage-models-as-a-service_maas#maas-prerequisites_maas-deploy)**
+
+!!! note "Red Hat account required"
+    The official guide requires a Red Hat login. If you don't have one,
+    create a free account at [access.redhat.com](https://access.redhat.com).
+
+Work through the prerequisites section and the initial configuration steps.
+When you are done, verify the deployment:
 
 ```bash
-oc apply -f - <<'EOF'
-apiVersion: operators.coreos.com/v1alpha1
-kind: Subscription
-metadata:
-  name: limitador-operator
-  namespace: openshift-operators
+oc get tenants.maas.opendatahub.io default-tenant \
+  -n models-as-a-service
+# READY should be True
+```
+
+!!! warning "Gotchas we found during testing"
+    These issues are not covered in the official guide but came up during
+    our validation on fresh clusters:
+
+    **AI Hub model catalog requires Model Registry.** To see the model
+    catalog under AI Hub in the dashboard, enable `modelregistry` in the
+    DSC and `llamastackoperator` for GenAI Studio:
+
+    ```
+    oc patch dsc default-dsc --type merge -p '{
+      "spec": {
+        "components": {
+          "llamastackoperator": {"managementState": "Managed"},
+          "modelregistry": {
+            "managementState": "Managed",
+            "registriesNamespace": "rhoai-model-registries"
+          }
+        }
+      }
+    }'
+    ```
+
+    **Gateway must allow cross-namespace routes.** The MaaS controller
+    creates HTTPRoutes in model namespaces. Add
+    `allowedRoutes.namespaces.from: All` to the gateway listener, or model
+    deployments fail with `NotAllowedByListeners`.
+
+    **Restart maas-api after creating the database.** If PostgreSQL is
+    deployed after the `maas-api` pod starts, the database schema won't
+    be initialized. Run
+    `oc rollout restart deployment/maas-api -n redhat-ods-applications`
+    to trigger the migration.
+
+    **GPU node taints.** If your GPU nodes have a `nvidia.com/gpu:NoSchedule`
+    taint, the `LLMInferenceService` controller does not propagate
+    tolerations from hardware profiles. Either remove the taint from GPU
+    nodes or patch the Deployment directly after model deployment.
+
+    **Authorino upgrade from RHOAI 3.3.** If upgrading from 3.3, the
+    Authorino operator (v1.1.3, `tech-preview-v1` channel) is too old for
+    Connectivity Link. Delete the old Subscription and CSV, then recreate
+    on the `stable` channel. This can briefly disrupt cluster auth.
+
+## Part 2: Deploy a model from the AI Hub catalog
+
+With MaaS deployed, open the RHOAI dashboard and navigate to **AI Hub >
+Catalog**. Find `gpt-oss-20b` (or search for it), click the model card, then
+click **Deploy**.
+
+The deployment wizard walks you through:
+
+1. **Model details** -- the catalog pre-fills the model URI and format.
+   Select **Generative AI model**. Leave **Use legacy deployment method**
+   unchecked.
+2. **Model deployment** -- select your GPU hardware profile, choose
+   **Distributed inference with llm-d** as the deployment resource, set
+   replicas to 1.
+3. **Advanced settings** -- select **Publish as MaaS**. This registers the
+   model with the MaaS gateway.
+4. **Review** and deploy.
+
+Wait for the model to become ready (the first deploy downloads model weights
+as an OCI image, which can take 10--15 minutes):
+
+```bash
+oc get llminferenceservice -n gpt-oss-model
+# READY should be True
+```
+
+Verify the model was published to MaaS:
+
+```bash
+oc get maasmodelref -n gpt-oss-model
+# PHASE should be Ready
+```
+
+## Part 3: Understand what MaaS built
+
+The catalog and MaaS controller created several resources. Inspect them to
+understand what's running.
+
+### The LLMInferenceService
+
+This is the core resource -- it replaces the standalone `InferenceService`
+from Path A:
+
+```bash
+oc get llminferenceservice -n gpt-oss-model -o yaml
+```
+
+Key sections:
+
+**`spec.model`** -- the model identity and source:
+
+```yaml
 spec:
-  channel: stable
-  name: limitador-operator
-  source: redhat-operators
-  sourceNamespace: openshift-marketplace
-  installPlanApproval: Automatic
-EOF
+  model:
+    name: RedHatAI/gpt-oss-20b
+    uri: hf://RedHatAI/gpt-oss-20b   # hf:// scheme, not https://
 ```
 
-Wait for the CSV to succeed:
+The `hf://` URI tells the storage initializer to pull from Hugging Face. The
+catalog may use an OCI image URI instead (`oci://registry.redhat.io/...`),
+which packages the weights as a container image -- faster and more
+reproducible than a git-lfs download.
 
-```bash
-oc get csv -n openshift-operators | grep limitador
-```
+**`spec.router`** -- connects this model to the MaaS gateway:
 
-### Upgrade Authorino (3.3 → 3.4 only)
-
-If your cluster was running RHOAI 3.3, Authorino v1.1.3 is installed on the
-`tech-preview-v1` channel. Connectivity Link requires v1.3.0 on the `stable`
-channel. An in-place channel switch does not work -- delete and recreate.
-
-```bash
-OLD_CSV=$(oc get subscription authorino-operator \
-  -n openshift-operators -o jsonpath='{.status.installedCSV}')
-oc delete subscription authorino-operator -n openshift-operators
-oc delete csv "$OLD_CSV" -n openshift-operators
-```
-
-Recreate on the `stable` channel:
-
-```bash
-oc apply -f - <<'EOF'
-apiVersion: operators.coreos.com/v1alpha1
-kind: Subscription
-metadata:
-  name: authorino-operator
-  namespace: openshift-operators
+```yaml
 spec:
-  channel: stable
-  name: authorino-operator
-  source: redhat-operators
-  sourceNamespace: openshift-marketplace
-  installPlanApproval: Automatic
-EOF
+  router:
+    route: {}
+    gateway:
+      refs:
+        - name: maas-default-gateway
+          namespace: openshift-ingress
 ```
 
-!!! warning "Temporary auth disruption"
-    Upgrading Authorino can briefly disrupt `oc` authentication on the
-    cluster. If you see `Unauthorized` errors, wait a minute and retry. If
-    the Authorino operator pod enters CrashLoopBackOff, delete it to force
-    an immediate restart:
-    `oc delete pod -l control-plane=authorino-operator -n openshift-operators`
+The MaaS controller reads this and auto-creates an `HTTPRoute` that maps
+`/<namespace>/<name>/v1/*` on the gateway to this model's backend pods.
 
-Wait for v1.3.0:
+**`spec.template`** -- the pod template, similar to a Deployment:
 
-```bash
-oc get csv -n openshift-operators | grep authorino
-# authorino-operator.v1.3.0   Succeeded
-```
-
-### Install Red Hat Connectivity Link
-
-```bash
-oc apply -f - <<'EOF'
-apiVersion: operators.coreos.com/v1alpha1
-kind: Subscription
-metadata:
-  name: rhcl-operator
-  namespace: openshift-operators
+```yaml
 spec:
-  channel: stable
-  name: rhcl-operator
-  source: redhat-operators
-  sourceNamespace: openshift-marketplace
-  installPlanApproval: Automatic
-EOF
-```
-
-Wait for the CSV:
-
-```bash
-oc get csv -n openshift-operators | grep rhcl
-# rhcl-operator.v1.3.3   Succeeded
-```
-
-### Create the Kuadrant custom resource
-
-Connectivity Link needs a `Kuadrant` CR in the `kuadrant-system` namespace
-to activate its control plane:
-
-```bash
-oc create namespace kuadrant-system 2>/dev/null || true
-
-oc apply -f - <<'EOF'
-apiVersion: kuadrant.io/v1beta1
-kind: Kuadrant
-metadata:
-  name: kuadrant
-  namespace: kuadrant-system
-EOF
-```
-
-Wait for it to become ready:
-
-```bash
-oc wait kuadrant kuadrant -n kuadrant-system \
-  --for=condition=Ready --timeout=300s
-```
-
-## Part 2: Configure MaaS infrastructure
-
-### Deploy PostgreSQL
-
-MaaS needs a PostgreSQL database (v14+) for API key lifecycle management.
-OpenShift AI does not provide one -- you deploy your own.
-
-```bash
-oc apply -n redhat-ods-applications -f - <<'EOF'
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: maas-db
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: maas-db
   template:
-    metadata:
-      labels:
-        app: maas-db
-    spec:
-      containers:
-        - name: postgres
-          image: registry.redhat.io/rhel9/postgresql-16:latest
-          ports:
-            - containerPort: 5432
-          env:
-            - name: POSTGRESQL_USER
-              value: maas
-            - name: POSTGRESQL_PASSWORD
-              value: maas-password
-            - name: POSTGRESQL_DATABASE
-              value: maas
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/pgsql/data
-      volumes:
-        - name: data
-          emptyDir: {}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: maas-db
-spec:
-  selector:
-    app: maas-db
-  ports:
-    - port: 5432
-      targetPort: 5432
-EOF
+    containers:
+      - name: main
+        image: registry.redhat.io/rhaiis/vllm-cuda-rhel9:3
+        args:
+          - --dtype
+          - bfloat16
+          - --enforce-eager
+          - --enable-auto-tool-choice
+          - --tool-call-parser
+          - openai
+          # ... same vLLM args as Path A's ServingRuntime
 ```
 
-Create the connection secret:
+These are the same vLLM arguments you used in Path A. The model runs on the
+same inference engine -- MaaS is a governance layer, not a different runtime.
+
+### The llm-d components
+
+Look at the running pods:
 
 ```bash
-oc create secret generic maas-db-config \
-  -n redhat-ods-applications \
-  --from-literal=DB_CONNECTION_URL='postgresql://maas:maas-password@maas-db.redhat-ods-applications.svc.cluster.local:5432/maas?sslmode=disable'
+oc get pods -n gpt-oss-model
 ```
 
-!!! warning "Production databases"
-    The `emptyDir` PostgreSQL above is for learning only -- data is lost on
-    pod restart. Production deployments should use a persistent database
-    with TLS (`sslmode=require`).
+You'll see two deployments:
 
-### Create the MaaS gateway
+- **`<name>-kserve`** -- the vLLM model server (your GPU workload)
+- **`<name>-kserve-router-scheduler`** -- the llm-d Endpoint Picker (EPP)
+
+The EPP is what [Module 11](../11-scaling-with-llm-d.md) described
+conceptually. With one replica it's a pass-through, but with multiple
+replicas it routes requests based on KV-cache utilization, queue depth, and
+prefix cache hit rate. You're running llm-d in production -- the catalog
+deployed it for you.
+
+### The MaaSModelRef
+
+"Publish as MaaS" created this resource:
 
 ```bash
-oc apply -f - <<'EOF'
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: maas-default-gateway
-  namespace: openshift-ingress
-  annotations:
-    opendatahub.io/managed: "false"
-    security.opendatahub.io/authorino-tls-bootstrap: "true"
-spec:
-  gatewayClassName: data-science-gateway-class
-  listeners:
-    - name: https
-      protocol: HTTPS
-      port: 443
-      allowedRoutes:
-        namespaces:
-          from: All
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: maas-gateway-tls
-EOF
+oc get maasmodelref -n gpt-oss-model -o yaml
 ```
 
-!!! note "Gateway annotations"
-    `opendatahub.io/managed: "false"` lets the MaaS controller manage auth
-    policies without interference from the ODH Model Controller.
-    `security.opendatahub.io/authorino-tls-bootstrap: "true"` enables TLS
-    between the gateway and Authorino.
+It references the `LLMInferenceService` and the gateway, making the model
+visible to the MaaS subscription and auth policy system. Without it, the
+model serves inference but isn't governed.
 
-Verify it becomes Programmed:
+## Part 4: Build a subscription and auth policy by hand
 
-```bash
-oc wait gateway maas-default-gateway -n openshift-ingress \
-  --for=condition=Programmed --timeout=120s
-```
+MaaS uses two custom resources to control who can access what:
 
-The gateway's HTTPS listener references a `maas-gateway-tls` secret. Generate
-it by annotating the auto-created gateway Service:
-
-```bash
-oc annotate service maas-default-gateway-data-science-gateway-class \
-  -n openshift-ingress \
-  service.beta.openshift.io/serving-cert-secret-name=maas-gateway-tls \
-  --overwrite
-
-oc get secret maas-gateway-tls -n openshift-ingress
-# Should show TYPE kubernetes.io/tls
-```
-
-### Configure TLS for Authorino
-
-Generate a serving certificate and enable TLS on the Authorino listener:
-
-```bash
-oc annotate service authorino-authorino-authorization \
-  -n kuadrant-system \
-  service.beta.openshift.io/serving-cert-secret-name=authorino-server-cert \
-  --overwrite
-
-oc patch authorino authorino -n kuadrant-system --type=merge --patch '{
-  "spec": {
-    "listener": {
-      "tls": {
-        "enabled": true,
-        "certSecretRef": {
-          "name": "authorino-server-cert"
-        }
-      }
-    }
-  }
-}'
-
-oc -n kuadrant-system set env deployment/authorino \
-  SSL_CERT_FILE=/etc/ssl/certs/openshift-service-ca/service-ca-bundle.crt \
-  REQUESTS_CA_BUNDLE=/etc/ssl/certs/openshift-service-ca/service-ca-bundle.crt
-```
-
-### Enable User Workload Monitoring
-
-MaaS requires User Workload Monitoring for usage metrics. If it is not
-already enabled on your cluster:
-
-```bash
-oc apply -f - <<'EOF'
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: cluster-monitoring-config
-  namespace: openshift-monitoring
-data:
-  config.yaml: |
-    enableUserWorkload: true
-EOF
-```
-
-### Enable MaaS in the DataScienceCluster
-
-```bash
-oc patch dsc default-dsc --type merge -p '{
-  "spec": {
-    "components": {
-      "kserve": {
-        "modelsAsService": {
-          "managementState": "Managed"
-        }
-      }
-    }
-  }
-}'
-```
-
-### Enable MaaS in the dashboard
-
-```bash
-oc patch odhdashboardconfig odh-dashboard-config \
-  -n redhat-ods-applications --type merge -p '{
-  "spec": {
-    "dashboardConfig": {
-      "modelAsService": true,
-      "genAiStudio": true,
-      "maasAuthPolicies": true
-    }
-  }
-}'
-```
-
-### Verify deployment
-
-```bash
-oc get tenants.maas.opendatahub.io default-tenant \
-  -n models-as-a-service \
-  -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
-# Expected: True
-```
-
-If it shows `False`, check the condition message for what is missing:
-
-```bash
-oc get tenants.maas.opendatahub.io default-tenant \
-  -n models-as-a-service \
-  -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
-```
-
-## Part 3: Publish a model to MaaS
-
-The simplest path is the RHOAI dashboard wizard. Navigate to your project's
-**Deployments** tab, click **Deploy model**, and select **Publish as MaaS**
-in the Advanced settings. This creates a `MaaSModelRef` that registers the
-model with the MaaS gateway.
-
-If your gpt-oss-20b model from Path A is already deployed as a standalone
-`InferenceService`, you can deploy a new instance using `LLMInferenceService`
-(llm-d) or vLLM through the dashboard, and publish it as MaaS in the same
-wizard.
-
-!!! tip "vLLM runtime for MaaS"
-    MaaS supports both llm-d and vLLM runtimes. vLLM on MaaS is Tech
-    Preview in 3.4. To enable it, set
-    `spec.dashboardConfig.vLLMDeploymentOnMaaS: true` in
-    `OdhDashboardConfig`. If your cluster has limited GPU and you don't need
-    llm-d's distributed inference features, vLLM is the simpler choice.
-
-Verify the model was published:
-
-```bash
-oc get maasmodelref -n <your-project-namespace>
-```
-
-## Part 4: Create a subscription and authorization policy
-
-MaaS uses two resources to control access:
-
-- **MaaSSubscription** -- grants groups quota for models with token limits
-- **MaaSAuthPolicy** -- authorizes groups to access model endpoints through
-  the gateway
+- **`MaaSSubscription`** -- grants groups quota for models with token limits
+- **`MaaSAuthPolicy`** -- authorizes groups to access model endpoints
+  through the API gateway
 
 Both are required. A subscription without an auth policy results in 403
 errors.
 
-### Create a subscription
+### Create an OpenShift group
 
-In the RHOAI dashboard, navigate to **Settings > Subscriptions** and click
-**Create subscription**:
+MaaS resolves access by group membership. Create a group and add yourself:
 
-1. **Name:** `calculus-dev`
-2. **Priority:** `0` (development tier)
-3. **Groups:** select or create a group (e.g., `calculus-users`)
-4. **Add models:** select the gpt-oss-20b model you published
-5. **Token limit:** 50,000 tokens per hour
-6. Check **Create a matching authorization policy**
-7. Click **Create subscription**
+```bash
+oc adm groups new calculus-users <your-username>
+```
 
-Or via CLI:
+!!! note "Users with colons in their name"
+    If your username contains a colon (e.g. `kube:admin`), encode it:
+    `oc adm groups new calculus-users "b64:$(echo -n 'kube:admin' | base64)"`
+    -- and also add the user directly to the subscription's `owner.users`
+    list (see below).
+
+### Build the MaaSSubscription
+
+Start with the required fields and build up:
 
 ```yaml
+# maas-subscription.yaml
 apiVersion: maas.opendatahub.io/v1alpha1
 kind: MaaSSubscription
 metadata:
   name: calculus-dev
   namespace: models-as-a-service
 spec:
+  # Priority determines which subscription is used when a user belongs
+  # to multiple groups. Higher number = higher priority.
   priority: 0
-  groups:
-    - calculus-users
-  models:
-    - name: <maasmodelref-name>
-      namespace: <model-namespace>
-      tokenLimits:
-        - limit: 50000
-          window: 1h
+
+  # Who owns this subscription -- groups and/or individual users
+  owner:
+    groups:
+      - name: calculus-users
+    # users:             # optional: add individual users directly
+    #   - "kube:admin"   # useful when group resolution has issues
+
+  # Which models this subscription grants quota for
+  modelRefs:
+    - name: <maasmodelref-name>       # from: oc get maasmodelref -n gpt-oss-model
+      namespace: gpt-oss-model
+      tokenRateLimits:
+        - limit: 50000                # 50k tokens
+          window: 1h                  # per hour
 ```
+
+Fill in the `<maasmodelref-name>` from your cluster:
+
+```bash
+oc get maasmodelref -n gpt-oss-model -o custom-columns='NAME:.metadata.name'
+```
+
+Apply:
 
 ```bash
 oc apply -f maas-subscription.yaml
-```
-
-!!! note "Groups"
-    MaaS validates access against OpenShift groups. Create the group and add
-    your user if it doesn't exist:
-    `oc adm groups new calculus-users <your-username>`
-
-### Verify the subscription
-
-```bash
 oc get maassubscriptions -n models-as-a-service
 # Phase should be Active
 ```
 
+### Build the MaaSAuthPolicy
+
+The auth policy uses the same group and model references:
+
+```yaml
+# maas-auth-policy.yaml
+apiVersion: maas.opendatahub.io/v1alpha1
+kind: MaaSAuthPolicy
+metadata:
+  name: calculus-dev-access
+  namespace: models-as-a-service
+spec:
+  # Who can access -- groups and/or individual users
+  subjects:
+    groups:
+      - name: calculus-users
+    # users:
+    #   - "kube:admin"
+
+  # Which model endpoints this policy authorizes
+  modelRefs:
+    - name: <maasmodelref-name>
+      namespace: gpt-oss-model
+```
+
+Apply:
+
+```bash
+oc apply -f maas-auth-policy.yaml
+oc get maasauthpolicies -n models-as-a-service
+# Phase should be Active
+```
+
+!!! tip "Dashboard alternative"
+    You can also create both resources through the RHOAI dashboard:
+    **Settings > Subscriptions > Create subscription**. Check **Create a
+    matching authorization policy** to create both in one step.
+
 ## Part 5: Get an API key and test
 
-Create an API key through the RHOAI dashboard: navigate to **Gen AI studio >
-API keys**, click **Create API key**, select the `calculus-dev` subscription,
-and save the generated `sk-oai-*` key.
+### Generate an API key
+
+Through the dashboard: **Gen AI studio > API keys > Create API key**. Select
+the `calculus-dev` subscription and save the generated `sk-oai-*` key.
 
 Or via the MaaS API:
 
 ```bash
-MAAS_HOST=$(oc get gateway maas-default-gateway -n openshift-ingress \
-  -o jsonpath='{.status.addresses[0].value}')
-
+MAAS_URL="https://<maas-gateway-route-hostname>"
 OCP_TOKEN=$(oc whoami -t)
 
-API_KEY=$(curl -sk "https://${MAAS_HOST}/maas-api/v1/api-keys" \
+API_KEY=$(curl -sk "${MAAS_URL}/maas-api/v1/api-keys" \
   -H "Authorization: Bearer ${OCP_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d '{"name": "calculus-agent", "expiration": "30d"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['api_key'])")
+  -d '{"name": "calculus-agent-key", "subscription": "calculus-dev"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])")
 
 echo "API key: ${API_KEY}"
 ```
 
+Replace `<maas-gateway-route-hostname>` with your gateway's external
+hostname. Find it in the OpenShift console under **Networking > Routes** in
+the `openshift-ingress` namespace, or from the RHOAI dashboard's AI asset
+endpoints page.
+
 !!! warning "Save the key"
     The full API key is shown only at creation time. Store it securely.
 
-Test inference through the MaaS gateway:
+### Test inference
 
 ```bash
-curl -sk "https://${MAAS_HOST}/maas-api/v1/chat/completions" \
+MODEL_NAME=$(oc get maasmodelref -n gpt-oss-model \
+  -o jsonpath='{.items[0].metadata.name}')
+
+curl -sk "${MAAS_URL}/gpt-oss-model/${MODEL_NAME}/v1/chat/completions" \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "RedHatAI/gpt-oss-20b",
-    "messages": [{"role": "user", "content": "In one short sentence, say hello."}],
-    "max_tokens": 300
-  }' | python3 -m json.tool
+  -d "{
+    \"model\": \"${MODEL_NAME}\",
+    \"messages\": [{\"role\": \"user\", \"content\": \"What is the derivative of x^3 + 2x?\"}],
+    \"max_tokens\": 200
+  }" | python3 -m json.tool
 ```
 
-You should see the same response format as Path A.
+You should see a response with `content` (the answer) and
+`reasoning` (the chain-of-thought) -- the same format as Path A.
 
 ## Part 6: Wire the calculus-agent to MaaS
 
@@ -511,21 +399,19 @@ The agent code is identical -- only environment variables change:
 
 | Variable | Path A (direct vLLM) | MaaS |
 |----------|---------------------|------|
-| `MODEL_ENDPOINT` | `http://gpt-oss-predictor.gpt-oss-model.svc.cluster.local:8000/v1` | `https://<maas-gateway-host>/maas-api/v1` |
-| `MODEL_NAME` | `RedHatAI/gpt-oss-20b` | `RedHatAI/gpt-oss-20b` (unchanged) |
+| `MODEL_ENDPOINT` | `http://gpt-oss-predictor.gpt-oss-model.svc.cluster.local:8000/v1` | `https://<maas-gateway>/gpt-oss-model/<model-name>/v1` |
+| `MODEL_NAME` | `RedHatAI/gpt-oss-20b` | `<maasmodelref-name>` |
 | `OPENAI_API_KEY` | (not set or dummy) | `<your-maas-api-key>` |
 
 Update the agent's ConfigMap and create a Secret for the API key:
 
 ```bash
-MAAS_HOST=$(oc get gateway maas-default-gateway -n openshift-ingress \
-  -o jsonpath='{.status.addresses[0].value}')
-
 oc patch configmap calculus-agent-config \
   -n calculus-agent \
   --type merge -p "{
     \"data\": {
-      \"MODEL_ENDPOINT\": \"https://${MAAS_HOST}/maas-api/v1\"
+      \"MODEL_ENDPOINT\": \"${MAAS_URL}/gpt-oss-model/${MODEL_NAME}/v1\",
+      \"MODEL_NAME\": \"${MODEL_NAME}\"
     }
   }"
 
@@ -595,12 +481,13 @@ sum by (subscription, model) (
 
 | Aspect | Path A (direct vLLM) | MaaS |
 |--------|---------------------|------|
-| Model runtime | KServe `InferenceService` | `LLMInferenceService` (llm-d) or vLLM via dashboard |
+| Model runtime | KServe `InferenceService` | `LLMInferenceService` (llm-d + vLLM) |
 | Endpoint | In-cluster Service URL | MaaS gateway with auth |
 | Authentication | None (in-cluster trust) | API key (`sk-oai-*`) via Authorino |
-| Quota management | None | Subscription-based token limits per group |
+| Quota management | None | `MaaSSubscription` with token limits per group |
 | Access control | None | `MaaSAuthPolicy` per group per model |
 | Cost visibility | None | Token consumption metrics and CSV export |
+| Scaling | Manual replica count | llm-d EPP routes across replicas by KV-cache load |
 | Multi-model | One InferenceService per model | One gateway, many models |
 | Agent code changes | -- | None (env vars only) |
 
