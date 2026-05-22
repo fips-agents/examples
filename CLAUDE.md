@@ -9,9 +9,9 @@ A **tutorial repository** that teaches building, deploying, and extending AI age
 Four top-level concerns coexist here:
 
 1. **MkDocs tutorial site** (`docs/`, `mkdocs.yml`) — published to https://fips-agents.github.io/examples/ via `.github/workflows/pages.yml` on every push to `main`.
-2. **`calculus-agent/`** — finished BaseAgent-based agent (the "Module 1–9" worked example). Has its own `CLAUDE.md` with BaseAgent-specific guidance.
+2. **`calculus-agent/`** — finished BaseAgent-based agent (the "Module 1–11" worked example). Has its own `CLAUDE.md` with BaseAgent-specific guidance.
 3. **`calculus-helper/`** — finished FastMCP v3 server providing 8 SymPy-powered calculus tools. Has its own `CLAUDE.md` with FastMCP-specific guidance.
-4. **`calculus-coordinator/`** — demo of the **subagent-as-tool** feature shipped in fipsagents 0.22.0 (agent-template PR #173). A tutor-role coordinator that delegates calculus computation to a registered peer agent (`calculus_specialist`, which in production points at the deployed `calculus-agent` route). Pins `fipsagents>=0.22.0`, so it is *ahead* of the tutorial's currently pinned version — it is a forward-looking demo, not part of the Module 1–9 sequence.
+4. **`calculus-coordinator/`** — demo of the **subagent-as-tool** feature shipped in fipsagents 0.22.0 (agent-template PR #173). A tutor-role coordinator that delegates calculus computation to a registered peer agent (`calculus_specialist`, which in production points at the deployed `calculus-agent` route). Pins `fipsagents>=0.22.0`, so it is *ahead* of the tutorial's currently pinned version — it is a forward-looking demo, not part of the Module 1–11 sequence.
 
 When working inside `calculus-agent/`, `calculus-helper/`, or `calculus-coordinator/`, that sub-project's `CLAUDE.md` is authoritative — it covers the agent or MCP server's structure, decorators, deployment, and common mistakes. This top-level file is only for cross-cutting tutorial-repo work.
 
@@ -29,11 +29,21 @@ The `--strict` flag is what GitHub Actions uses, so always reproduce CI behavior
 
 ## Tutorial structure
 
-`mkdocs.yml` defines the canonical module ordering. The tutorial is sequential: each module assumes the previous one is complete. When editing:
+`mkdocs.yml` defines the canonical module ordering. The tutorial has two tiers:
 
-- Modules 1–9 live in `docs/0N-*.md` and are referenced by number in cross-links.
+**Core modules (0–11)** are sequential — each assumes the previous one is complete:
+
+- Modules 0–9 live in `docs/0N-*.md`, Modules 10–11 in `docs/1N-*.md`.
 - Reference pages live in `docs/reference/` and are linked from multiple modules.
 - The tutorial pins a specific fipsagents version (currently v0.11.0 — see `docs/index.md`). Bumping that version requires a coordinated re-test of every module.
+
+**Supplementary modules** (`docs/supplementary/`) are standalone add-ons that extend the tutorial with optional platform features. They are independent of each other and can be completed in any order after their listed prerequisites:
+
+- **Agent Memory with MemoryHub** — cross-session memory via semantic search (RHOAI 3.x)
+- **Models as a Service** — subscription-based model governance, API key auth, token quotas (RHOAI 3.4+). Delegates platform setup to the [official Red Hat guide](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/deploy-and-manage-models-as-a-service_maas), then teaches CRD anatomy and hands-on governance.
+- **MCP Gateway** — centralized MCP server access with auth and rate limiting via Kuadrant (RHOAI 3.4+, Tech Preview)
+
+Supplementary modules require RHOAI 3.4 unless noted otherwise. They follow a different pattern than core modules: they include their own infrastructure setup rather than relying on Setup Guides.
 
 When fixing issues found by tutorial walk-throughs, file them at `fips-agents/examples` on GitHub and link the issue from the commit.
 
