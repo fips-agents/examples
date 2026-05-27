@@ -168,13 +168,13 @@ With the three files updated, rebuild the container and push a new deployment:
 
 ```bash
 # Rebuild the image in the cluster
-oc start-build calculus-agent --from-dir=. --follow -n calculus-agent
+oc start-build calculus-agent --from-dir=. --follow --context="$CTX" -n calculus-agent
 
 # Restart the deployment to pick up the new image
-oc rollout restart deployment/calculus-agent -n calculus-agent
+oc rollout restart deployment/calculus-agent --context="$CTX" -n calculus-agent
 
 # Wait for the new pod to become ready
-oc rollout status deployment/calculus-agent -n calculus-agent
+oc rollout status deployment/calculus-agent --context="$CTX" -n calculus-agent
 ```
 
 Or use the Makefile shortcut:
@@ -190,8 +190,8 @@ make redeploy PROJECT=calculus-agent
     testing:
 
     ```bash
-    oc get pods -n calculus-agent   # agent pod
-    oc get pods -n calculus-mcp     # MCP server pod
+    oc get pods --context="$CTX" -n calculus-agent   # agent pod
+    oc get pods --context="$CTX" -n calculus-mcp     # MCP server pod
     ```
 
 ## Test the integration
@@ -202,24 +202,38 @@ Verify the agent discovered the MCP tools:
 # Note: this is the *agent* route in calculus-agent. The MCP server's route
 # from Module 3 lives in calculus-mcp -- if your shell still has $ROUTE from
 # that session, re-export it here so you don't curl the wrong service.
-AGENT_ROUTE=$(oc get route calculus-agent -n calculus-agent -o jsonpath='{.spec.host}')
+AGENT_ROUTE=$(oc get route calculus-agent --context="$CTX" -n calculus-agent -o jsonpath='{.spec.host}')
 
 curl -sk "https://$AGENT_ROUTE/v1/agent-info" | python -m json.tool
 ```
 
-You should see the MCP tools in the response:
+You should see the MCP tools in the response (truncated for brevity):
 
 ```json
 {
-    "name": "calculus-agent",
-    "version": "0.1.0",
-    "description": "A math tutor agent that solves calculus problems step by step",
+    "agent": {
+        "name": "calculus-agent",
+        "version": "0.1.0",
+        "description": "A math tutor agent that solves calculus problems step by step"
+    },
+    "model": { "name": "...", "temperature": 0.3, "max_tokens": 4096 },
+    "system_prompt": "You are a Calculus Helper. ...",
     "tools": [
-        "integrate",
-        "differentiate"
+        {"name": "integrate", "description": "...", "parameters": { "..." }},
+        {"name": "differentiate", "description": "...", "parameters": { "..." }},
+        {"name": "evaluate_limit", "description": "...", "parameters": { "..." }},
+        {"name": "evaluate_numeric", "description": "...", "parameters": { "..." }},
+        {"name": "simplify_expression", "description": "...", "parameters": { "..." }},
+        {"name": "solve_equation", "description": "...", "parameters": { "..." }},
+        {"name": "solve_ode", "description": "...", "parameters": { "..." }},
+        {"name": "taylor_series", "description": "...", "parameters": { "..." }}
     ]
 }
 ```
+
+This is the same nested structure you saw in Module 1, now populated with the
+eight tools discovered from the MCP server. Each tool entry includes the full
+JSON schema in `parameters`.
 
 Now send a calculus problem and trace the flow:
 
@@ -253,7 +267,7 @@ The response will contain the model's formatted answer, something like:
     request, and model interaction in the pod logs:
 
     ```bash
-    oc logs deployment/calculus-agent -n calculus-agent --tail=50
+    oc logs deployment/calculus-agent --context="$CTX" -n calculus-agent --tail=50
     ```
 
     Look for lines like `MCP tool call: integrate` and `MCP tool result:` to
@@ -275,8 +289,8 @@ curl -sk "https://$AGENT_ROUTE/v1/chat/completions" \
 
 ## The architectural takeaway
 
-Look at what you did in this module: edited three files, deleted one, ran a
-rebuild. No new dependencies. No protocol code. No serialization logic.
+Look at what you did in this module: edited three files and ran a rebuild. No
+new dependencies. No protocol code. No serialization logic.
 
 This is the MCP value proposition. The agent is a thin orchestration layer that
 routes between the user and a set of capabilities. Those capabilities can live

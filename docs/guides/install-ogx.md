@@ -96,7 +96,16 @@ The `${env.X}` syntax is OGX's runtime substitution — values come from the ope
 
 ## 4. Create the `LlamaStackDistribution`
 
-The Operator turns this CR into a `Deployment`, `Service`, and `PersistentVolumeClaim`, mounting the ConfigMap at `/etc/llama-stack/config.yaml`. Save as `ogx-distribution.yaml`:
+The Operator turns this CR into a `Deployment`, `Service`, and `PersistentVolumeClaim`, mounting the ConfigMap at `/etc/llama-stack/config.yaml`. Save as `ogx-distribution.yaml`.
+
+!!! info "Resource naming"
+    The operator derives resource names from the CR's `metadata.name`. If you
+    named your CR `ogx`, the operator creates deployment `ogx` and service
+    `ogx-service`. A different CR name produces correspondingly different
+    resource names.
+
+!!! note "vLLM service URL format depends on KServe service config"
+    Many RHOAI 3.x clusters set `kserve.rawDeploymentServiceConfig: Headless` in the DataScienceCluster. With Headless, the predictor Service has `ClusterIP: None`, DNS resolves directly to pod IPs, and the Service's `port: 80 -> targetPort: 8000` mapping doesn't apply -- you must include `:8000` in `VLLM_URL` (or whatever port your vLLM container listens on). Without Headless, port 80 works and `:8000` is unnecessary. Check with `oc get svc <predictor> -n <ns> -o jsonpath='{.spec.clusterIP}'` -- `None` means Headless.
 
 ```yaml
 apiVersion: llamastack.io/v1alpha1
@@ -137,13 +146,13 @@ Three things to swap for your cluster:
 - **`VLLM_INFERENCE_MODEL`** — the served model name vLLM advertises (the same value you set as `MODEL_NAME`).
 - **`VLLM_API_TOKEN`** — leave as `"fake"` for an unauthenticated in-cluster vLLM. If your vLLM is behind an auth layer, set the real token.
 
+!!! tip "Joining an existing cluster?"
+    The service name `gpt-oss-predictor` in the example `VLLM_URL` comes from this tutorial's own deployment. If the model was deployed by someone else, the service name may differ. Run `oc get svc -n <model-namespace>` to find the correct name and substitute it in the URL.
+
 !!! warning "Three settings the upstream docs get wrong — don't copy them"
     1. Use `kind: LlamaStackDistribution` and `apiVersion: llamastack.io/v1alpha1`, **not** `OGXDistribution` / `ogx.io/v1alpha1`. The rebrand hasn't shipped in the operator code yet.
     2. Always set `spec.network.allowedFrom.namespaces: ["*"]`. Omit it and the operator applies a default-deny policy that blocks the OpenShift router from reaching the pod — your Route hangs with no diagnostic. Tighten per cluster as needed; `["*"]` is the right starting point for a tutorial.
     3. `VLLM_URL` must include `/v1`. Several upstream docs and reference configs show the URL without it, but the OpenAI client OGX uses internally appends `/chat/completions` literally — drop the `/v1` and every chat completion returns vLLM's 404.
-
-!!! note "vLLM service URL format depends on KServe service config"
-    Many RHOAI 3.x clusters set `kserve.rawDeploymentServiceConfig: Headless` in the DataScienceCluster. With Headless, the predictor Service has `ClusterIP: None`, DNS resolves directly to pod IPs, and the Service's `port: 80 → targetPort: 8000` mapping doesn't apply — you must include `:8000` in `VLLM_URL` (or whatever port your vLLM container listens on). Without Headless, port 80 works and `:8000` is unnecessary. Check with `oc get svc <predictor> -n <ns> -o jsonpath='{.spec.clusterIP}'` — `None` means Headless.
 
 Apply it:
 

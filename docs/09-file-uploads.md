@@ -64,7 +64,7 @@ server:
 ```
 
 The `[files]` extra pulls in **Docling** (text extraction) and
-**python-magic** (content-based MIME sniffing). It adds about 500 MB to the
+**python-magic** (content-based MIME sniffing). It adds ~5 GB to the
 container image because of Docling's torch and transformers dependencies, so
 keep it opt-in for agents that don't ingest files:
 
@@ -295,11 +295,11 @@ is **never buffered in gateway memory**.
 This matters because the gateway is the customer-facing entry point and
 needs to fail fast on obviously-bad uploads. Validation happens before the
 upstream request fires, so a 415 response never costs a TCP connection to
-the agent. Configure via four env vars:
+the agent. Configure via three env vars:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GATEWAY_FILES_MAX_BYTES` | `25m` (26 MiB) | Hard cap; supports `k`/`m`/`g` |
+| `GATEWAY_FILES_MAX_BYTES` | `25m` (25 MB) | Hard cap; supports `k`/`m`/`g` |
 | `GATEWAY_FILES_ALLOWED_MIME` | unset | Comma-separated allowlist; `image/*` ok |
 | `GATEWAY_FILES_UPLOAD_TIMEOUT` | `5m` | Per-request deadline for backend POST |
 
@@ -368,11 +368,26 @@ server:
       - text/plain
 ```
 
-Add the extra to `pyproject.toml` and reinstall:
+Add the `files` extra to `pyproject.toml` under `[project.optional-dependencies]`,
+then reinstall. Before:
+
+```toml
+[project.optional-dependencies]
+dev = [
+```
+
+After:
+
+```toml
+[project.optional-dependencies]
+files = ["fipsagents[files]"]
+dev = [
+```
+
+Then install:
 
 ```bash
 cd calculus-agent
-sed -i '' 's/^dev = \[/files = ["fipsagents[files]"]\ndev = [/' pyproject.toml
 pip install -e '.[files]'
 ```
 
@@ -433,11 +448,11 @@ Once the agent is happy locally, redeploy:
 ```bash
 make deploy PROJECT=calculus-agent
 helm upgrade calculus-gateway ../calculus-gateway/chart \
-  -n calculus-agent \
+  --kube-context="$CTX" -n calculus-agent \
   --set files.maxBytes=25m \
   --set files.allowedMime="application/pdf,image/*"
 helm upgrade calculus-ui ../calculus-ui/chart \
-  -n calculus-agent \
+  --kube-context="$CTX" -n calculus-agent \
   --set files.maxBytes=25m
 ```
 
@@ -451,7 +466,7 @@ then ask a question.
 curl http://my-agent:8080/v1/agent-info | jq '.server.files.enabled'
 
 # Gateway: configured caps?
-oc logs deployment/calculus-gateway -n calculus-agent | grep files_max_bytes
+oc logs deployment/calculus-gateway --context="$CTX" -n calculus-agent | grep files_max_bytes
 
 # UI: config exposed?
 curl http://my-ui:3000/api/config | jq
@@ -480,8 +495,6 @@ to take it further:
   for S1000D technical documentation, plugged in via the `FileParser`
   ABC.
 - **Per-tenant quotas** so a single user can't monopolise the bytes PVC.
-  Combine with the per-tenant cost tracking from
-  [Module 8](08-secrets-and-production.md).
 
 The patterns from this module — opt-in extras, layered security,
 streaming proxies, and explicit failure modes — apply equally to any

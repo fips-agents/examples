@@ -1,7 +1,7 @@
 # 8. Production Hardening
 
 Your full stack is deployed: agent, MCP server, gateway, UI, and code execution
-sandbox. Everything works in development. This final module covers what it takes
+sandbox. Everything works in development. This module covers what it takes
 to run the stack in production -- secrets management, FIPS compliance,
 authentication, security policy, resource limits, monitoring, and
 observability.
@@ -21,19 +21,19 @@ FIPS-validated algorithms. No application-level configuration is needed.
 To verify FIPS mode is active in a running pod, first confirm the pod is up:
 
 ```bash
-oc get pods -n calculus-agent -l app.kubernetes.io/instance=calculus-agent
+oc get pods --context="$CTX" -n calculus-agent -l app.kubernetes.io/instance=calculus-agent
 ```
 
 You should see a pod in `Running` state with `READY 1/1` (or `2/2` if the
 sandbox sidecar from Module 6 is enabled). If the pod is `CrashLoopBackOff`,
 `ImagePullBackOff`, or `Pending`, the next command will fail with "no running
 pod found" -- that's a deployment problem, not a FIPS problem; run
-`oc describe deployment calculus-agent -n calculus-agent` to diagnose.
+`oc describe deployment calculus-agent --context="$CTX" -n calculus-agent` to diagnose.
 
 Once the pod is running:
 
 ```bash
-oc exec deployment/calculus-agent -n calculus-agent -- \
+oc exec deployment/calculus-agent --context="$CTX" -n calculus-agent -- \
   cat /proc/sys/crypto/fips_enabled
 ```
 
@@ -88,7 +88,7 @@ case). For endpoints that require real credentials, create a Secret:
 ```bash
 oc create secret generic llm-credentials \
   --from-literal=OPENAI_API_KEY=sk-your-real-key-here \
-  -n calculus-agent
+  --context="$CTX" -n calculus-agent
 ```
 
 ### Mount via Helm values
@@ -108,7 +108,7 @@ env:
 Then upgrade the release:
 
 ```bash
-helm upgrade calculus-agent chart/ --reuse-values -n calculus-agent
+helm upgrade calculus-agent chart/ --reuse-values --kube-context="$CTX" -n calculus-agent
 ```
 
 The Deployment template injects the Secret value as an environment variable.
@@ -144,7 +144,7 @@ For HMAC-based auth (simplest to set up):
 ```bash
 oc create secret generic mcp-auth \
   --from-literal=MCP_AUTH_JWT_SECRET=your-shared-secret \
-  -n calculus-agent
+  --context="$CTX" -n calculus-agent
 ```
 
 Then add the env vars to the MCP server's Helm values:
@@ -266,7 +266,7 @@ spec:
           averageUtilization: 70
 ```
 
-Apply it with `oc apply -f hpa.yaml -n calculus-agent`. The same pattern works
+Apply it with `oc apply -f hpa.yaml --context="$CTX" -n calculus-agent`. The same pattern works
 for the MCP server -- create a separate HPA targeting its Deployment.
 
 !!! warning "Apply HPA after your final Helm upgrade"
@@ -284,8 +284,9 @@ for the MCP server -- create a separate HPA targeting its Deployment.
 
 ### Health and readiness probes
 
-The agent exposes `/healthz` for liveness probes. The Helm chart includes
-probe definitions -- enable them in `values.yaml`:
+The agent exposes `/healthz` for liveness probes and `/readyz` for readiness
+probes. The Helm chart includes probe definitions -- enable them in
+`values.yaml`:
 
 ```yaml
 probes:
@@ -293,14 +294,15 @@ probes:
 ```
 
 This configures Kubernetes to restart the pod if `/healthz` stops responding
-(liveness) and to stop routing traffic to it during startup (readiness).
+(liveness) and to hold traffic until `/readyz` returns 200 during startup
+(readiness).
 
 ### Pod logs
 
 The most immediate debugging tool. Watch logs in real time:
 
 ```bash
-oc logs deployment/calculus-agent -n calculus-agent -f
+oc logs deployment/calculus-agent --context="$CTX" -n calculus-agent -f
 ```
 
 Key log patterns to watch for:
@@ -325,7 +327,7 @@ this in Module 5, annotate the agent's Route:
 ```bash
 oc annotate route calculus-gateway \
   haproxy.router.openshift.io/timeout=120s \
-  -n calculus-agent --overwrite
+  --context="$CTX" -n calculus-agent --overwrite
 ```
 
 Do the same for the agent Route if it is also directly exposed. The UI Route
@@ -359,7 +361,8 @@ Override via Helm:
 ```bash
 helm upgrade my-agent chart/ \
   --set config.STORAGE_BACKEND=sqlite \
-  --set config.SESSIONS_ENABLED=true
+  --set config.SESSIONS_ENABLED=true \
+  --kube-context="$CTX"
 ```
 
 The server exposes `POST /v1/sessions`, `GET /v1/sessions/{id}`, and
@@ -477,7 +480,8 @@ Override via Helm or env vars:
 helm upgrade my-agent chart/ \
   --set config.STORAGE_BACKEND=sqlite \
   --set config.TRACES_ENABLED=true \
-  --set config.FEEDBACK_ENABLED=true
+  --set config.FEEDBACK_ENABLED=true \
+  --kube-context="$CTX"
 ```
 
 #### REST endpoints
@@ -581,7 +585,8 @@ Enable feedback on the calculus agent with sqlite storage:
 
 ## What's next
 
-You've built and hardened a complete AI agent system across eight modules:
+You've built and hardened a complete AI agent system across the first eight
+modules:
 
 1. **Scaffolded** an agent project and understood every file
 2. **Configured** the agent for a real LLM and deployed it to OpenShift

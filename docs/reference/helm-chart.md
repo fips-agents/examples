@@ -13,8 +13,8 @@ chart uses to handle rolling updates and optional sidecars.
 apiVersion: v2
 name: ecosystem-test-agent
 description: Helm chart for deploying a BaseAgent to OpenShift
-version: 0.6.0
-appVersion: 0.6.0
+version: 0.9.0
+appVersion: 0.9.0
 type: application
 ```
 
@@ -439,6 +439,74 @@ spec:
 When `route.host` is empty, OpenShift auto-generates a hostname from the Route
 name and the cluster's wildcard domain (e.g.,
 `release-ecosystem-test-agent.apps.cluster.example.com`).
+
+## File bytes PVC
+
+**Template:** `templates/files-bytes-pvc.yaml`
+
+Created when both `files.enabled` and `files.persistence.enabled` are `true`.
+Provides persistent storage for uploaded file bytes so they survive pod
+restarts.
+
+```yaml
+spec:
+  accessModes:
+    - {{ .Values.files.persistence.accessMode | default "ReadWriteOnce" }}
+  resources:
+    requests:
+      storage: {{ .Values.files.persistence.size }}
+```
+
+| values.yaml key | Resource field | Default |
+|-----------------|----------------|---------|
+| `files.persistence.enabled` | Controls whether the PVC is created | `false` |
+| `files.persistence.size` | `spec.resources.requests.storage` | `5Gi` |
+| `files.persistence.storageClass` | `spec.storageClassName` (omitted if empty) | `""` |
+| `files.persistence.accessMode` | `spec.accessModes[0]` | `ReadWriteOnce` |
+
+For multi-replica deployments, set `accessMode: ReadWriteMany` and use a
+storage class that supports RWX, or switch to the S3-compatible bytes backend
+(`files.bytesBackend.type: s3`) instead.
+
+## ClamAV PVC
+
+**Template:** `templates/clamav-pvc.yaml`
+
+Created when `files.enabled`, `files.virusScanner.enabled`, and
+`files.virusScanner.persistence.enabled` are all `true`. Provides persistent
+storage for the ClamAV signature database so it doesn't re-download the full
+signature set (~250 MB) on every pod restart.
+
+| values.yaml key | Resource field | Default |
+|-----------------|----------------|---------|
+| `files.virusScanner.persistence.enabled` | Controls whether the PVC is created | `false` |
+| `files.virusScanner.persistence.size` | `spec.resources.requests.storage` | `2Gi` |
+| `files.virusScanner.persistence.storageClass` | `spec.storageClassName` (omitted if empty) | `""` |
+
+## Seccomp profile
+
+**Template:** `templates/seccomp-profile.yaml`
+
+Created when both `sandbox.enabled` and `sandbox.seccomp.enabled` are `true`.
+Produces a `SeccompProfile` custom resource (from the Security Profiles
+Operator) that blocks dangerous syscalls -- process injection (`ptrace`),
+kernel module loading, filesystem root manipulation (`mount`, `chroot`), eBPF,
+and namespace manipulation -- while allowing the syscalls the sandbox's
+uvicorn server and Python runtime need.
+
+Prerequisites:
+
+- Security Profiles Operator (SPO) installed on the cluster (GA since OCP 4.12).
+- A custom SCC or SPO ProfileBinding that permits Localhost seccomp profiles
+  (the default `restricted-v2` SCC only allows `RuntimeDefault`).
+
+| values.yaml key | Resource field | Default |
+|-----------------|----------------|---------|
+| `sandbox.seccomp.enabled` | Controls whether the SeccompProfile CR is created | `false` |
+
+The Deployment template references this profile via
+`seccompProfile.localhostProfile` on the sandbox container when
+`sandbox.seccomp.enabled` is `true`.
 
 ## FIPS compatibility
 

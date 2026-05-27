@@ -148,7 +148,7 @@ class MyAgent(BaseAgent):
     async def step(self) -> StepResult:
         response = await self.call_model()
         response = await self.run_tool_calls(response)
-        return StepResult.done(result=response.content)
+        return StepResult.done(response.content)
 ```
 
 Three things to notice:
@@ -326,6 +326,9 @@ curl localhost:8080/v1/agent-info | python -m json.tool
     "tools": []
 }
 ```
+
+The `model.name` value reflects whatever you configured in `agent.yaml`; the
+scaffold default is shown here.
 
 The `tools` array is a list of objects (`{name, description, parameters}`)
 when tools are registered, and `system_prompt` reflects the rendered prompt

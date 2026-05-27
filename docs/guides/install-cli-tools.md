@@ -98,6 +98,11 @@ pipx install fips-agents-cli
 fips-agents --version
 ```
 
+!!! note "CLI version"
+    This tutorial was tested with fips-agents v0.11.0. Newer versions are
+    backward-compatible but may produce slightly different scaffold output.
+    To install the exact version: `pipx install 'fips-agents-cli==0.11.0'`
+
 ## Log in to your cluster
 
 ```bash

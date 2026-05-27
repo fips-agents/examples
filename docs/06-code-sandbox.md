@@ -110,13 +110,13 @@ Deploy the updated chart:
 helm upgrade calculus-agent chart/ \
   --set sandbox.enabled=true \
   --reuse-values \
-  -n calculus-agent
+  -n calculus-agent --kube-context="$CTX"
 ```
 
 Verify the pod now has two containers:
 
 ```bash
-oc get pods -n calculus-agent -l app.kubernetes.io/instance=calculus-agent
+oc get pods -n calculus-agent --context="$CTX" -l app.kubernetes.io/instance=calculus-agent
 ```
 
 ```
@@ -187,7 +187,7 @@ client.
     For local development without OpenShift, start the sandbox manually:
 
     ```bash
-    cd sandbox && uvicorn sandbox.app:app --port 8000
+    cd code-sandbox && uvicorn sandbox.app:app --port 8000
     ```
 
     Then set the environment variable before starting your agent:
@@ -230,25 +230,31 @@ You've added a new file (`tools/code_executor.py`) and updated the system
 prompt, so the agent image needs to be rebuilt:
 
 ```bash
-oc start-build calculus-agent --from-dir=. --follow -n calculus-agent
-oc rollout restart deployment/calculus-agent -n calculus-agent
-oc rollout status deployment/calculus-agent -n calculus-agent
+oc start-build calculus-agent --from-dir=. --follow -n calculus-agent --context="$CTX"
+oc rollout restart deployment/calculus-agent -n calculus-agent --context="$CTX"
+oc rollout status deployment/calculus-agent -n calculus-agent --context="$CTX"
 ```
 
 Verify the agent discovered the new local tool alongside the MCP tools:
 
 ```bash
-ROUTE=$(oc get route calculus-agent -n calculus-agent -o jsonpath='{.spec.host}')
+ROUTE=$(oc get route calculus-agent -n calculus-agent --context="$CTX" -o jsonpath='{.spec.host}')
 
 curl -sk "https://$ROUTE/v1/agent-info" | python -m json.tool
 ```
 
 ```json
 {
+    "agent": {
+        "name": "calculus-agent",
+        "version": "0.1.0"
+    },
+    "model": { "name": "...", "temperature": 0.3, "max_tokens": 4096 },
+    "system_prompt": "You are a Calculus Helper. ...",
     "tools": [
-        "integrate",
-        "differentiate",
-        "code_executor"
+        {"name": "integrate", "description": "...", "parameters": { "..." }},
+        {"name": "differentiate", "description": "...", "parameters": { "..." }},
+        {"name": "code_executor", "description": "...", "parameters": { "..." }}
     ]
 }
 ```
@@ -308,7 +314,7 @@ guarantees the request reaches the security layers.
 In one terminal, forward the sandbox port out of the pod:
 
 ```bash
-oc port-forward -n calculus-agent \
+oc port-forward -n calculus-agent --context="$CTX" \
   deployment/calculus-agent 8000:8000
 ```
 
@@ -375,8 +381,8 @@ the allocated list.
     the sandbox container's logs and the namespace's events:
 
     ```bash
-    oc logs -n calculus-agent deployment/calculus-agent -c sandbox --tail=20
-    oc get events -n calculus-agent --field-selector reason=OOMKilling
+    oc logs -n calculus-agent --context="$CTX" deployment/calculus-agent -c sandbox --tail=20
+    oc get events -n calculus-agent --context="$CTX" --field-selector reason=OOMKilling
     ```
 
 When you're done testing, stop the `oc port-forward` process with Ctrl-C.

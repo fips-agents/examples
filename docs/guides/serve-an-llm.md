@@ -23,6 +23,9 @@ Both paths produce the same two values that the rest of the tutorial reads:
 | `MODEL_ENDPOINT` | `http://gpt-oss-predictor.gpt-oss-model.svc.cluster.local:8000/v1` or `https://api.example.com/v1` |
 | `MODEL_NAME` | `RedHatAI/gpt-oss-20b` |
 
+!!! tip "Joining an existing cluster?"
+    If the model was deployed by someone else, the KServe service name may differ from `gpt-oss-predictor` (e.g. it could be `gpt-oss-20b-predictor` or any other name chosen at deploy time). Run `oc get svc -n <model-namespace>` to find the correct service name and substitute it in the `MODEL_ENDPOINT` URL below.
+
 ## Path A: Serve on-cluster with vLLM
 
 ### Prerequisites

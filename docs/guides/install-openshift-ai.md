@@ -36,6 +36,11 @@ From the OpenShift web console:
 4. Choose the **`fast-3.x`** channel (3.2 or later).
 5. Accept the defaults (installed into `redhat-ods-operator`).
 
+!!! tip "Already have RHOAI on a shared cluster?"
+    If Red Hat OpenShift AI is already installed (e.g., by a cluster admin),
+    skip the Namespace, OperatorGroup, and Subscription steps below.
+    Jump straight to [Create a DataScienceCluster](#create-a-datasciencecluster).
+
 Or from the CLI:
 
 ```bash
@@ -52,7 +57,7 @@ metadata:
   name: rhods-operator
   namespace: redhat-ods-operator
 spec:
-  channel: fast-3.x
+  channel: fast-3.x   # stable-3.x also works and is more common in production clusters
   name: rhods-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
@@ -125,7 +130,7 @@ If `kserve` shows `Ready` in the DSC status, you're done.
 
 ## Further reading
 
-- [Red Hat OpenShift AI 3.2 documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.2)
+- [Red Hat OpenShift AI documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/)
 - [Red Hat AI 3 supported product and hardware configurations](https://docs.redhat.com/en/documentation/red_hat_ai/3/html-single/supported_product_and_hardware_configurations/index)
 - [Red Hat OpenShift AI supported configurations (3.x)](https://access.redhat.com/articles/rhoai-supported-configs-3.x)
 - [Open Data Hub upstream](https://opendatahub.io/)

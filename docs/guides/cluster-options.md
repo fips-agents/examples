@@ -7,7 +7,8 @@ matches your access and budget.
 !!! note "Why 4.20?"
     Red Hat OpenShift AI 3.x requires OpenShift 4.19 or later, and RHOAI 3.x
     distributed inference (e.g. llm-d) requires 4.20. This tutorial is
-    validated on OpenShift 4.20 + RHOAI 3.3 (channel `fast-3.x`).
+    validated on OpenShift 4.20 + RHOAI 3.3--3.4. Both the `fast-3.x`
+    and `stable-3.x` operator channels work.
 
 ## At a glance
 

@@ -114,15 +114,42 @@ OGX is in a different namespace, so use the cluster-internal DNS name. The OTLP 
 !!! warning "v0.7.1 needs the `opentelemetry-instrument` wrapper to export traces"
     OGX v0.7.1's built-in telemetry initializer only sets up a `MeterProvider` (metrics), not a `TracerProvider` — the routers create spans, but they go to the no-op default tracer and are discarded. To make traces flow, override the container entrypoint to wrap the server with `opentelemetry-instrument`, which auto-configures both providers from env vars. The `opentelemetry-distro` and `opentelemetry-instrumentation-*` packages are already in the starter image.
 
-    The override below replicates the existing entrypoint's v0.7.1 startup path (uvicorn factory mode); if you upgrade to a future distribution image whose entrypoint differs, refresh this from the upstream image's command. Track [llama-stack#5189](https://github.com/meta-llama/llama-stack/issues) for native `TracerProvider` support landing upstream — once it does, the `command`/`args` override here becomes unnecessary.
+    The override below replicates the existing entrypoint's v0.7.1 startup path (uvicorn factory mode); if you upgrade to a future distribution image whose entrypoint differs, refresh this from the upstream image's command. Native `TracerProvider` support was tracked in [ogx#3806](https://github.com/ogx-ai/ogx/issues/3806) (now closed) — once your distribution image carries that work, the `command`/`args` override here becomes unnecessary.
 
-Edit the `LlamaStackDistribution` from [Install OGX](install-ogx.md):
+Patch the `LlamaStackDistribution` from [Install OGX](install-ogx.md) to add the `command`/`args` override and four OTEL env vars under `spec.server.containerSpec`:
 
 ```bash
-oc edit llamastackdistribution ogx -n ogx
+oc patch llamastackdistribution ogx -n ogx --type=merge -p '
+spec:
+  server:
+    containerSpec:
+      command: ["opentelemetry-instrument"]
+      args:
+        - uvicorn
+        - llama_stack.core.server.server:create_app
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8321"
+        - --workers
+        - "1"
+        - --factory
+      env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://jaeger.observability.svc.cluster.local:4318"
+        - name: OTEL_SERVICE_NAME
+          value: "ogx"
+        - name: OTEL_TRACES_EXPORTER
+          value: "otlp"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "http/protobuf"
+'
 ```
 
-Add the `command`/`args` override and four env vars under `spec.server.containerSpec`:
+!!! warning "Merge patch replaces the entire `env` list"
+    The merge patch above replaces `spec.server.containerSpec.env` wholesale. If your `LlamaStackDistribution` already carries env vars (e.g. `VLLM_URL`), include them in the patch alongside the four OTEL entries. Run `oc get llamastackdistribution ogx -n ogx -o yaml` first to see the current env block.
+
+The target state of `spec.server.containerSpec` after patching:
 
 ```yaml
 spec:

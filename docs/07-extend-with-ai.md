@@ -134,7 +134,8 @@ critical points by differentiating, then solve the resulting equation, then
 evaluate the original function at those points.
 
 The command generates eval cases in `evals/evals.yaml` that capture these
-scenarios. You can re-run them later with `make eval` as a regression suite.
+scenarios. You can re-run them later with `make eval` from the agent project
+(`calculus-agent/`) as a regression suite.
 
 !!! warning "Ergonomic issues found here are cheap to fix"
     A confusing parameter name caught during exercise costs minutes to rename.
@@ -164,13 +165,13 @@ registers them. When you add tools to the server, the agent picks them up.
 Restart the agent to trigger discovery:
 
 ```bash
-oc rollout restart deployment/calculus-agent -n calculus-agent
+oc rollout restart deployment/calculus-agent -n calculus-agent --context="$CTX"
 ```
 
 Verify the agent sees all eight tools:
 
 ```bash
-ROUTE=$(oc get route calculus-agent -n calculus-agent -o jsonpath='{.spec.host}')
+ROUTE=$(oc get route calculus-agent -n calculus-agent --context="$CTX" -o jsonpath='{.spec.host}')
 curl -sk "https://$ROUTE/v1/agent-info" | python -m json.tool
 ```
 
@@ -220,6 +221,7 @@ examples that load only when activated.
 Switch to the agent project and run:
 
 ```bash
+cd ../calculus-agent
 /add-skill
 ```
 

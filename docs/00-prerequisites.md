@@ -5,9 +5,9 @@ work through this checklist. Each item links to a setup guide if you need help.
 
 !!! tip "Two paths through this tutorial"
     **Path A — Full cluster.** You have an OpenShift cluster with OpenShift AI
-    installed and at least one GPU available. You will serve **Granite 3.3 8B
-    Instruct** on-cluster with vLLM and route the agent to it. This is the
-    intended experience.
+    installed and at least one GPU available. You will serve **`gpt-oss-20b`**
+    on-cluster with vLLM and route the agent to it. This is the intended
+    experience.
 
     **Path B — External model.** You don't have a cluster, or your cluster has
     no GPUs (e.g., the [Red Hat Developer Sandbox][sandbox]). You will still
@@ -89,6 +89,15 @@ helm version --short                         # helm available
 
 If any of those fail, fix it before continuing — the tutorial assumes all five
 work.
+
+!!! tip "Multi-cluster safety"
+    Throughout the tutorial, every `oc` command includes `--context="$CTX"` to
+    avoid accidentally targeting the wrong cluster. Set it once per shell
+    session:
+
+    ```bash
+    export CTX=$(oc config current-context)
+    ```
 
 ## Ready?
 

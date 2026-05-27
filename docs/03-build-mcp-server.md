@@ -154,6 +154,47 @@ def format_result(expr, *, assumptions=None, extra=None) -> dict[str, Any]:
     surfaces things like "integration constant omitted" that help the agent
     explain results accurately.
 
+### parse_symbol
+
+Validates that a string is a bare identifier and returns a SymPy `Symbol`.
+Tools use this for variable names (`"x"`, `"theta"`) rather than
+`parse_expression`, which would accept operators and numbers:
+
+```python
+def parse_symbol(var_str: str, *, context: str = "variable") -> sp.Symbol:
+    stripped = var_str.strip()
+    if not stripped:
+        raise ToolError(f"{context} cannot be empty.")
+    if not stripped.isidentifier():
+        raise ToolError(
+            f"{context} '{stripped}' is not a valid identifier. "
+            "Use a simple name like 'x', 'theta', or 't_1' -- "
+            "no spaces, operators, or leading digits."
+        )
+    return sp.Symbol(stripped)
+```
+
+### parse_substitutions
+
+Parses a `{var_name: value_expression}` dict into SymPy form. Values are
+themselves expressions, so callers can pass `"sqrt(2)"` or `"pi/4"` as
+substitution targets -- not just bare numbers. The `differentiate` tool's
+`at_point` parameter uses this:
+
+```python
+def parse_substitutions(
+    subs: dict[str, str] | None, *, context: str = "substitutions",
+) -> dict[sp.Symbol, sp.Expr]:
+    if not subs:
+        return {}
+    result: dict[sp.Symbol, sp.Expr] = {}
+    for name, value in subs.items():
+        sym = parse_symbol(name, context=f"{context} key '{name}'")
+        expr = parse_expression(value, context=f"{context} value for '{name}'")
+        result[sym] = expr
+    return result
+```
+
 ## Add the integrate tool
 
 Create `src/tools/integrate.py`. This is the primary walkthrough --
@@ -311,7 +352,7 @@ text/event-stream`. After `initialize`, subsequent requests must also include
 the `Mcp-Session-Id` returned in the response headers.
 
 ```bash
-ROUTE=$(oc get route mcp-server -n calculus-mcp -o jsonpath='{.spec.host}')
+ROUTE=$(oc get route mcp-server -n calculus-mcp --context="$CTX" -o jsonpath='{.spec.host}')
 
 # Initialize -- dump response headers so we can extract the session ID
 curl -sk "https://$ROUTE/mcp/" \

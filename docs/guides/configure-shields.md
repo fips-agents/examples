@@ -2,6 +2,11 @@
 
 Shields are OGX's enforcement layer — when an agent passes `guardrails: ["shield-id"]` on a Responses request, OGX runs the named shield against the input and the model output, and refuses the turn if the shield fires. Shields are registered server-side in OGX's `config.yaml`; agents only ever pass the ID.
 
+!!! note "ConfigMap name must match"
+    This guide extends the ConfigMap named `ogx-config` created in
+    [Install OGX](install-ogx.md). If you used a different name there,
+    substitute it throughout the YAML below.
+
 This guide extends the `ogx-config` ConfigMap from [Install OGX](install-ogx.md) with two shield options:
 
 - **Path A — built-in `code-scanner`** (no extra model required). Right for the tutorial.

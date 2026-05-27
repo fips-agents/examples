@@ -352,8 +352,7 @@ make deploy PROJECT=calculus-agent
 
 # UI
 cd calculus-ui
-oc start-build calculus-ui --from-dir=. --follow \
-  -n calculus-agent --context="$CTX"
+make build-openshift PROJECT=calculus-agent
 make deploy PROJECT=calculus-agent
 ```
 

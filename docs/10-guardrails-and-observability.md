@@ -113,6 +113,13 @@ async def step(self) -> StepResult:
 
 ### Rebuild and redeploy
 
+!!! tip "Returning in a new shell?"
+    Re-export your cluster context if this is a new terminal session:
+
+    ```bash
+    export CTX=$(oc config current-context)
+    ```
+
 ```bash
 oc start-build calculus-agent --from-dir=. --follow -n calculus-agent --context="$CTX"
 
@@ -132,7 +139,7 @@ oc rollout status deployment/calculus-agent -n calculus-agent --context="$CTX" -
 Watch the logs for the platform-mode startup notice:
 
 ```bash
-oc logs -n calculus-agent deploy/calculus-agent | grep platform.enabled
+oc logs -n calculus-agent deploy/calculus-agent --context="$CTX" | grep platform.enabled
 ```
 
 You should see something like `platform.enabled=true — OGX will orchestrate 1 platform.mcp entries server-side`. The framework has skipped its own MCP client connections.
@@ -140,7 +147,7 @@ You should see something like `platform.enabled=true — OGX will orchestrate 1 
 ### Verify it works end to end
 
 ```bash
-AGENT_URL=$(oc get route calculus-agent -n calculus-agent -o jsonpath='https://{.spec.host}')
+AGENT_URL=$(oc get route calculus-agent -n calculus-agent --context="$CTX" -o jsonpath='https://{.spec.host}')
 
 curl -s "$AGENT_URL/v1/chat/completions" \
   -H "Content-Type: application/json" \
@@ -176,7 +183,7 @@ The agent never saw normal model output for this turn; OGX intercepted it and re
 In agent logs:
 
 ```bash
-oc logs -n calculus-agent deploy/calculus-agent --tail=20
+oc logs -n calculus-agent deploy/calculus-agent --context="$CTX" --tail=20
 ```
 
 `finish_reason="guardrail"` appears on the StreamComplete event. `PlatformResponse.refusal` is the string that came back to `step()`; `PlatformResponse.content` is `None`.
@@ -217,7 +224,9 @@ platform:
 The `connectors:` block syntax in OGX `config.yaml` varies by distribution version. The agent-side pattern is stable; if your platform team has registered MCP connectors centrally, ask them for the connector ID and use the reference form. Read what's currently registered with:
 
 ```bash
-curl -s "$OGX_ENDPOINT/../v1beta/connectors" | jq
+# OGX_ENDPOINT ends with /v1; strip the version segment to reach the v1beta surface.
+OGX_BASE="${OGX_ENDPOINT%/v1}"
+curl -s "$OGX_BASE/v1beta/connectors" | jq
 ```
 
 For the rest of this module, the inline form is fine — it's what the agent-template's live integration tests use.
@@ -283,5 +292,5 @@ The same pattern applies to other concerns over time — memory, prompt manageme
 
 - [agent-template#154](https://github.com/fips-agents/agent-template/issues/154) — the feature issue that introduced platform mode (closed; landed in fipsagents 0.21)
 - [OGX Responses API](https://ogx-ai.github.io/docs/api/create-openai-response-v-1-responses-post)
-- [OGX safety shields](https://ogx-ai.github.io/docs/building_applications/safety)
+- [OGX guardrails (agent execution loop)](https://ogx-ai.github.io/docs/building_applications/agent_execution_loop)
 - [OGX moderations](https://ogx-ai.github.io/docs/api) — `/v1/moderations`
