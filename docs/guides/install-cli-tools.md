@@ -110,6 +110,14 @@ oc login --server=https://api.<cluster-domain>:6443 -u <user>
 oc whoami
 ```
 
+!!! tip "Multi-cluster safety"
+    Every `oc` command in this guide includes `--context="$CTX"` to avoid
+    targeting the wrong cluster. Set it once per shell session:
+
+    ```bash
+    export CTX=$(oc config current-context)
+    ```
+
 (In the OpenShift web console, click your username → **Copy login command**
 to get the exact `oc login --token=...` invocation.)
 
@@ -123,7 +131,7 @@ pipx --version
 oc version --client
 helm version --short
 fips-agents --version
-oc whoami                  # logged in
+oc whoami --context="$CTX" # logged in
 ```
 
 ## Next

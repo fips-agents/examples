@@ -7,6 +7,14 @@ This guide covers two paths:
 - **Path A — Jaeger all-in-one**. A single Deployment with a built-in OTLP receiver and trace UI. Right for the tutorial.
 - **Path B — your cluster's existing observability stack**. Right when you've already got Tempo / a managed OpenTelemetry Collector / a corporate observability platform.
 
+!!! tip "Multi-cluster safety"
+    Every `oc` command in this guide includes `--context="$CTX"` to avoid
+    targeting the wrong cluster. Set it once per shell session:
+
+    ```bash
+    export CTX=$(oc config current-context)
+    ```
+
 ## Path A: Jaeger all-in-one
 
 Jaeger's all-in-one image bundles an OTLP receiver, an in-memory trace store, and the Jaeger UI in a single container. Perfect for tutorials and dev clusters; not for production.
@@ -14,7 +22,7 @@ Jaeger's all-in-one image bundles an OTLP receiver, an in-memory trace store, an
 ### 1. Create a namespace
 
 ```bash
-oc new-project observability
+oc new-project observability --context="$CTX"
 ```
 
 ### 2. Deploy Jaeger
@@ -94,14 +102,14 @@ spec:
 ```
 
 ```bash
-oc apply -f jaeger.yaml
-oc rollout status deployment/jaeger -n observability --timeout=120s
+oc apply --context="$CTX" -n observability -f jaeger.yaml
+oc rollout status deployment/jaeger --context="$CTX" -n observability --timeout=120s
 ```
 
 ### 3. Get the UI URL
 
 ```bash
-JAEGER_UI="https://$(oc get route jaeger-ui -n observability -o jsonpath='{.spec.host}')"
+JAEGER_UI="https://$(oc get route jaeger-ui --context="$CTX" -n observability -o jsonpath='{.spec.host}')"
 echo "$JAEGER_UI"
 ```
 
@@ -119,7 +127,7 @@ OGX is in a different namespace, so use the cluster-internal DNS name. The OTLP 
 Patch the `LlamaStackDistribution` from [Install OGX](install-ogx.md) to add the `command`/`args` override and four OTEL env vars under `spec.server.containerSpec`:
 
 ```bash
-oc patch llamastackdistribution ogx -n ogx --type=merge -p '
+oc patch llamastackdistribution ogx --context="$CTX" -n ogx --type=merge -p '
 spec:
   server:
     containerSpec:
@@ -183,7 +191,7 @@ spec:
 The Operator rolls the pod automatically. Wait for it:
 
 ```bash
-oc rollout status deployment/ogx -n ogx --timeout=180s
+oc rollout status deployment/ogx --context="$CTX" -n ogx --timeout=180s
 ```
 
 ### 5. Verify traces flow

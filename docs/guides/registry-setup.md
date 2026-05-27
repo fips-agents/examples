@@ -32,6 +32,14 @@ podman login quay.io
 # Password: <robot token>
 ```
 
+!!! tip "Multi-cluster safety"
+    Every `oc` command in this guide includes `--context="$CTX"` to avoid
+    targeting the wrong cluster. Set it once per shell session:
+
+    ```bash
+    export CTX=$(oc config current-context)
+    ```
+
 ### 4. Create a pull secret in OpenShift
 
 Apply the secret to the namespace where the agent runs (the tutorial uses
@@ -39,12 +47,13 @@ Apply the secret to the namespace where the agent runs (the tutorial uses
 
 ```bash
 oc create secret docker-registry quay-pull-secret \
+  --context="$CTX" \
   --docker-server=quay.io \
   --docker-username='yourname+tutorial-pusher' \
   --docker-password='<robot-token>' \
   -n calculus-agent
 
-oc secrets link default quay-pull-secret --for=pull -n calculus-agent
+oc secrets link default quay-pull-secret --context="$CTX" --for=pull -n calculus-agent
 ```
 
 Repeat for any other namespace that needs to pull from your Quay namespace
@@ -62,6 +71,7 @@ or you want to keep everything in-cluster.
 
 ```bash
 oc patch configs.imageregistry.operator.openshift.io/cluster \
+  --context="$CTX" \
   --type merge \
   -p '{"spec":{"defaultRoute":true}}'
 ```
@@ -69,7 +79,7 @@ oc patch configs.imageregistry.operator.openshift.io/cluster \
 ### 2. Get the route hostname
 
 ```bash
-HOST=$(oc get route default-route -n openshift-image-registry \
+HOST=$(oc get route default-route --context="$CTX" -n openshift-image-registry \
   -o jsonpath='{.spec.host}')
 echo "$HOST"
 ```
@@ -77,7 +87,7 @@ echo "$HOST"
 ### 3. Log in
 
 ```bash
-podman login -u $(oc whoami) -p $(oc whoami -t) "$HOST"
+podman login -u $(oc whoami --context="$CTX") -p $(oc whoami --context="$CTX" -t) "$HOST"
 ```
 
 ### 4. Push using the OpenShift-native image path
@@ -108,9 +118,9 @@ EOF
 
 podman push <registry>/<namespace>/test:1
 
-oc run pull-test --image=<registry>/<namespace>/test:1 --restart=Never -n <namespace>
-oc logs pull-test -n <namespace>     # should print "ok"
-oc delete pod pull-test -n <namespace>
+oc run pull-test --context="$CTX" --image=<registry>/<namespace>/test:1 --restart=Never -n <namespace>
+oc logs pull-test --context="$CTX" -n <namespace>     # should print "ok"
+oc delete pod pull-test --context="$CTX" -n <namespace>
 ```
 
 ## Next

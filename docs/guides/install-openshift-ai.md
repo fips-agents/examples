@@ -41,10 +41,18 @@ From the OpenShift web console:
     skip the Namespace, OperatorGroup, and Subscription steps below.
     Jump straight to [Create a DataScienceCluster](#create-a-datasciencecluster).
 
+!!! tip "Multi-cluster safety"
+    Every `oc` command in this guide includes `--context="$CTX"` to avoid
+    targeting the wrong cluster. Set it once per shell session:
+
+    ```bash
+    export CTX=$(oc config current-context)
+    ```
+
 Or from the CLI:
 
 ```bash
-oc apply -f - <<EOF
+oc apply --context="$CTX" -n redhat-ods-operator -f - <<EOF
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
 metadata:
@@ -67,7 +75,7 @@ EOF
 Wait until the operator pods are running:
 
 ```bash
-oc get pods -n redhat-ods-operator -w
+oc get pods --context="$CTX" -n redhat-ods-operator -w
 ```
 
 ## Create a DataScienceCluster
@@ -104,13 +112,13 @@ spec:
 Apply it:
 
 ```bash
-oc apply -f dsc.yaml
+oc apply --context="$CTX" -f dsc.yaml
 ```
 
 ## Verify
 
 ```bash
-oc get dsc default-dsc -o jsonpath='{.status.phase}'
+oc get dsc default-dsc --context="$CTX" -o jsonpath='{.status.phase}'
 # Ready
 ```
 
@@ -118,7 +126,7 @@ The Dashboard hostname should also resolve. RHOAI 3.x exposes the
 dashboard via Gateway API (not a plain `Route` in `redhat-ods-applications`):
 
 ```bash
-oc get route data-science-gateway -n openshift-ingress \
+oc get route data-science-gateway --context="$CTX" -n openshift-ingress \
   -o jsonpath='{.spec.host}'
 ```
 

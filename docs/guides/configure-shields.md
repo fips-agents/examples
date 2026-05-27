@@ -20,6 +20,14 @@ Both paths produce a registered shield ID that Module 10 reads from `OGX_SHIELD`
 !!! warning "userConfig replaces — it does not merge"
     The `userConfig` ConfigMap *replaces* the starter image's bundled `run.yaml` wholesale. Anything not listed in your ConfigMap is gone, including bundled safety providers. Each path below shows the **complete** ConfigMap to apply, not a delta.
 
+!!! tip "Multi-cluster safety"
+    Every `oc` command in this guide includes `--context="$CTX"` to avoid
+    targeting the wrong cluster. Set it once per shell session:
+
+    ```bash
+    export CTX=$(oc config current-context)
+    ```
+
 ## Prerequisites
 
 - OGX deployed per [Install OGX](install-ogx.md), with the Wave 1 `ogx-config` ConfigMap in place
@@ -133,14 +141,14 @@ data:
 The whole expansion mirrors the upstream LlamaStack starter distribution config. The canonical reference is `llama_stack/distributions/starter/run.yaml`; this ConfigMap is the minimum subset of that starter that satisfies Module 10 without dragging in eval/scoring/datasetio providers we don't use.
 
 ```bash
-oc apply -f ogx-config.yaml
+oc apply --context="$CTX" -n ogx -f ogx-config.yaml
 ```
 
 Roll the OGX pod to pick up the change:
 
 ```bash
-oc rollout restart deployment/ogx -n ogx
-oc rollout status deployment/ogx -n ogx --timeout=180s
+oc rollout restart deployment/ogx --context="$CTX" -n ogx
+oc rollout status deployment/ogx --context="$CTX" -n ogx --timeout=180s
 ```
 
 Confirm the shield is registered:
@@ -178,8 +186,8 @@ This guide uses **`RedHatAI/Llama-Guard-4-12B-quantized.w8a8`** — Red Hat AI's
 Create the namespace and label it for the RHOAI dashboard:
 
 ```bash
-oc new-project llama-guard-model
-oc label namespace llama-guard-model opendatahub.io/dashboard=true
+oc new-project llama-guard-model --context="$CTX"
+oc label namespace llama-guard-model opendatahub.io/dashboard=true --context="$CTX"
 ```
 
 `RedHatAI/Llama-Guard-4-12B-quantized.w8a8` is open on Hugging Face — no token required. If you swap in a gated Llama Guard variant (e.g., `meta-llama/Llama-Guard-3-8B`), see [Serve an LLM](serve-an-llm.md) for the HF token Secret pattern.
@@ -309,8 +317,8 @@ spec:
 ```
 
 ```bash
-oc apply -f llama-guard.yaml
-oc wait --for=condition=Ready inferenceservice/llama-guard \
+oc apply --context="$CTX" -n llama-guard-model -f llama-guard.yaml
+oc wait --context="$CTX" --for=condition=Ready inferenceservice/llama-guard \
   -n llama-guard-model --timeout=1500s
 ```
 

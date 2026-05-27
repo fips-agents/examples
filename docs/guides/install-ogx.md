@@ -18,6 +18,14 @@ This guide installs the upstream OGX Operator and creates a minimal distribution
 - `oc` logged in to the cluster with `cluster-admin` rights (the operator install creates cluster-scoped resources)
 - The in-cluster `MODEL_ENDPOINT` and `MODEL_NAME` from Serve an LLM. Those exact values become `VLLM_URL` and `VLLM_INFERENCE_MODEL` in the `LlamaStackDistribution` below — the `/v1` suffix on the URL is required (see warning in Step 4).
 
+!!! tip "Multi-cluster safety"
+    Every `oc` command in this guide includes `--context="$CTX"` to avoid
+    targeting the wrong cluster. Set it once per shell session:
+
+    ```bash
+    export CTX=$(oc config current-context)
+    ```
+
 ## 1. Install the OGX Operator
 
 The operator is distributed as a single manifest (no OperatorHub package yet — track [ogx-k8s-operator](https://github.com/ogx-ai/ogx-k8s-operator) for OLM-bundled releases).
@@ -26,26 +34,26 @@ Pin to a tagged release:
 
 ```bash
 OGX_OPERATOR_VERSION=v0.9.0
-oc apply -f https://raw.githubusercontent.com/ogx-ai/ogx-k8s-operator/${OGX_OPERATOR_VERSION}/release/operator.yaml
+oc apply --context="$CTX" -f https://raw.githubusercontent.com/ogx-ai/ogx-k8s-operator/${OGX_OPERATOR_VERSION}/release/operator.yaml
 ```
 
 The operator runs in `llama-stack-k8s-operator-system`. Wait for it to come up:
 
 ```bash
 oc rollout status deployment/llama-stack-k8s-operator-controller-manager \
-  -n llama-stack-k8s-operator-system --timeout=180s
+  --context="$CTX" -n llama-stack-k8s-operator-system --timeout=180s
 ```
 
 Verify the CRD is registered:
 
 ```bash
-oc get crd llamastackdistributions.llamastack.io
+oc get crd llamastackdistributions.llamastack.io --context="$CTX"
 ```
 
 ## 2. Create a namespace for OGX
 
 ```bash
-oc new-project ogx
+oc new-project ogx --context="$CTX"
 ```
 
 ## 3. Author the run-config ConfigMap
@@ -89,7 +97,7 @@ data:
 ```
 
 ```bash
-oc apply -f ogx-config.yaml
+oc apply --context="$CTX" -n ogx -f ogx-config.yaml
 ```
 
 The `${env.X}` syntax is OGX's runtime substitution — values come from the operator's `containerSpec.env` (which we set in the next step). Defaults apply when an env var is unset.
@@ -157,13 +165,13 @@ Three things to swap for your cluster:
 Apply it:
 
 ```bash
-oc apply -f ogx-distribution.yaml
+oc apply --context="$CTX" -n ogx -f ogx-distribution.yaml
 ```
 
 The operator creates a `Deployment` named `ogx` and a `Service` exposing port 8321. Wait for it:
 
 ```bash
-oc rollout status deployment/ogx -n ogx --timeout=300s
+oc rollout status deployment/ogx --context="$CTX" -n ogx --timeout=300s
 ```
 
 ## 5. Expose the endpoint
@@ -177,9 +185,9 @@ http://ogx-service.ogx.svc.cluster.local:8321
 For local testing with `curl`, expose a Route. OGX with a reasoning model like gpt-oss can take longer than the default 30 s to reply — set a 300 s router timeout:
 
 ```bash
-oc create route edge ogx --service=ogx-service --port=8321 -n ogx
-oc annotate route ogx -n ogx haproxy.router.openshift.io/timeout=300s
-OGX_ENDPOINT="https://$(oc get route ogx -n ogx -o jsonpath='{.spec.host}')/v1"
+oc create route edge ogx --context="$CTX" --service=ogx-service --port=8321 -n ogx
+oc annotate route ogx --context="$CTX" -n ogx haproxy.router.openshift.io/timeout=300s
+OGX_ENDPOINT="https://$(oc get route ogx --context="$CTX" -n ogx -o jsonpath='{.spec.host}')/v1"
 echo "$OGX_ENDPOINT"
 ```
 

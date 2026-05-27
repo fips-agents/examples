@@ -34,11 +34,19 @@ Both paths produce the same two values that the rest of the tutorial reads:
 - One GPU node with ~24 GB VRAM (L40S, A10, A100, or H100 all work)
 - A namespace to host the model — this guide uses `gpt-oss-model`
 
+!!! tip "Multi-cluster safety"
+    Every `oc` command in this guide includes `--context="$CTX"` to avoid
+    targeting the wrong cluster. Set it once per shell session:
+
+    ```bash
+    export CTX=$(oc config current-context)
+    ```
+
 ### 1. Create the namespace
 
 ```bash
-oc new-project gpt-oss-model
-oc label namespace gpt-oss-model opendatahub.io/dashboard=true
+oc new-project gpt-oss-model --context="$CTX"
+oc label namespace gpt-oss-model opendatahub.io/dashboard=true --context="$CTX"
 ```
 
 The label puts the InferenceService under **Models → Deployed models** in
@@ -216,29 +224,29 @@ spec:
 Apply all three manifests:
 
 ```bash
-oc apply -f pvc.yaml
-oc apply -f vllm-runtime.yaml
-oc apply -f inferenceservice.yaml
+oc apply --context="$CTX" -n gpt-oss-model -f pvc.yaml
+oc apply --context="$CTX" -n gpt-oss-model -f vllm-runtime.yaml
+oc apply --context="$CTX" -n gpt-oss-model -f inferenceservice.yaml
 ```
 
 The first startup pulls the model weights and can take 5–15 minutes. Watch
 progress:
 
 ```bash
-oc logs -n gpt-oss-model -l serving.kserve.io/inferenceservice=gpt-oss -f
+oc logs --context="$CTX" -n gpt-oss-model -l serving.kserve.io/inferenceservice=gpt-oss -f
 ```
 
 Wait for `DeploymentReady=True`:
 
 ```bash
-oc wait --for=condition=Ready inferenceservice/gpt-oss \
+oc wait --context="$CTX" --for=condition=Ready inferenceservice/gpt-oss \
   -n gpt-oss-model --timeout=900s
 ```
 
 ### 5. Get the endpoint URL
 
 ```bash
-URL=$(oc get inferenceservice gpt-oss -n gpt-oss-model \
+URL=$(oc get inferenceservice gpt-oss --context="$CTX" -n gpt-oss-model \
   -o jsonpath='{.status.url}')
 echo "$URL"
 ```
@@ -249,7 +257,7 @@ echo "$URL"
     Check with:
 
     ```bash
-    oc get svc -n gpt-oss-model -l serving.kserve.io/inferenceservice=gpt-oss \
+    oc get svc --context="$CTX" -n gpt-oss-model -l serving.kserve.io/inferenceservice=gpt-oss \
       -o jsonpath='{.items[0].spec.clusterIP}{"\n"}'
     ```
 
@@ -260,7 +268,7 @@ Smoke test (RawDeployment + Headless doesn't expose a Route by default,
 so use port-forward):
 
 ```bash
-oc port-forward -n gpt-oss-model deployment/gpt-oss-predictor 18000:8000 &
+oc port-forward --context="$CTX" -n gpt-oss-model deployment/gpt-oss-predictor 18000:8000 &
 curl -s http://localhost:18000/v1/models | jq
 curl -s http://localhost:18000/v1/chat/completions \
   -H "Content-Type: application/json" \
