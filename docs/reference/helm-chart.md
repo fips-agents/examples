@@ -86,8 +86,7 @@ strings like `"50"` are preserved correctly.
 |-----|------|-------------|
 | `config.<NAME>` | string | Injected as env var `<NAME>` into the agent container via `envFrom`. |
 
-As of v0.11.0, the following ConfigMap keys control the observability and
-storage features added in that release:
+The following ConfigMap keys control observability and storage features:
 
 | Key | Description | Default (if unset) |
 |-----|-------------|--------------------|

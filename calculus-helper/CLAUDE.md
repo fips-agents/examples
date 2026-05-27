@@ -237,7 +237,7 @@ Run `./remove_examples.sh` before first deployment to remove example code and re
 
 ## MCP Development Workflow
 
-This project provides slash commands (in `.claude/commands/`) for a structured development workflow. The calculus-helper server was built using this exact sequence:
+This template provides slash commands for a structured development workflow:
 
 ### Recommended Sequence
 

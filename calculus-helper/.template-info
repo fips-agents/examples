@@ -1,15 +1,16 @@
 {
   "generator": {
     "tool": "fips-agents-cli",
-    "version": "0.5.1"
+    "version": "0.15.1"
   },
   "template": {
-    "url": "https://github.com/rdwj/mcp-server-template",
-    "commit": "e0605be66881",
-    "full_commit": "e0605be6688154689099f2bb62fd16d0755992f1"
+    "url": "https://github.com/fips-agents/mcp-server-template",
+    "type": "mcp-server",
+    "commit": "42cd9dc671a7",
+    "full_commit": "42cd9dc671a78cb844c9ee026c0cbe678c6df19d"
   },
   "project": {
     "name": "calculus-helper",
-    "created_at": "2026-04-16T15:43:20.468560+00:00"
+    "created_at": "2026-05-27T21:14:05.115450+00:00"
   }
 }

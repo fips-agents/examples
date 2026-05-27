@@ -4,15 +4,8 @@ Modules 1–9 are about *building* the agent: scaffolding, tools, MCP, deploymen
 
 The platform here is **OGX** — the rebrand of LlamaStack — an OpenAI-compatible AI application server. Instead of the agent calling vLLM directly and running its own MCP tool loop, the agent calls OGX's [Responses API](https://ogx-ai.github.io/docs/api), and OGX handles the loop, the MCP, and the shields server-side.
 
-!!! tip "Prerequisite: fipsagents 0.21+"
-    The tutorial baseline is fipsagents 0.11.0; platform mode requires **0.21.0 or later**. If you've been following Modules 1–9 with the baseline, bump now:
-
-    ```bash
-    cd calculus-agent
-    pip install --upgrade 'fipsagents>=0.21'
-    ```
-
-    Modules 1–9 still work on 0.21+ unchanged — this is a forward-compatible bump.
+!!! tip "Platform mode is included"
+    The tutorial baseline (fipsagents v0.31.0) includes platform mode — no version bump needed.
 
 ## What changes
 

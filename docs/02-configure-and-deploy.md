@@ -327,7 +327,7 @@ make redeploy PROJECT=calculus-agent
 
 ### Optional: Enable observability features
 
-Starting with fipsagents v0.11.0, the agent server supports session persistence,
+The agent server supports session persistence,
 trace collection, and Prometheus metrics. All three are configured under the
 `server:` section of `agent.yaml`:
 

@@ -1,6 +1,6 @@
 # MCP Server Development Process
 
-This document describes the workflow that was used to build this calculus-helper server, including the slash commands available at each phase. The same workflow works for any MCP server built on top of [rdwj/mcp-server-template](https://github.com/rdwj/mcp-server-template).
+This document describes the complete workflow for developing MCP servers using this template, including the slash commands available at each phase.
 
 ## Workflow Overview
 

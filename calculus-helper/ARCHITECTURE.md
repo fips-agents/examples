@@ -1,150 +1,277 @@
 # Architecture
 
-The calculus-helper MCP server is a thin, stateless FastMCP 3.x application built around [SymPy](https://www.sympy.org). Eight tools expose calculus operations (differentiation, integration, limits, series, equation and ODE solving, simplification, numerical evaluation) with a uniform return contract that lets agents chain tool outputs back into inputs without re-parsing.
+This project implements a [FastMCP 3.x](https://gofastmcp.com) server with local STDIO and OpenShift HTTP transports, filesystem-based component discovery, and OpenShift-native build/deploy.
 
-## Component inventory
+- Core framework: FastMCP 3.x with standalone decorators
+- Component discovery: `FileSystemProvider` scans `src/tools/`, `src/resources/`, `src/prompts/`
+- Transports: STDIO (local), HTTP (OpenShift)
+- Auth: built-in `JWTVerifier` + `RemoteAuthProvider` with per-component `require_scopes()`
+- Middleware: class-based, passed to `FastMCP` constructor
+- Generator system: Jinja2 templates for scaffolding components
+- OpenShift: ImageStream, BuildConfigs (Git or Binary), Deployment, Service, Route, HPA
 
-| Kind | Count | Files |
-|---|---|---|
-| Tools | 8 | `src/tools/{differentiate,integrate,evaluate_limit,taylor_series,solve_equation,solve_ode,simplify_expression,evaluate_numeric}.py` |
-| Resources | 0 | — |
-| Prompts | 0 | — |
-| Custom middleware | 0 | — (FastMCP's built-in `LoggingMiddleware` is configured in `src/core/server.py`) |
+## Components
 
-No server-side state is held between calls. Each tool is a pure function of its inputs plus SymPy.
+- `src/core/server.py`: `create_server()` builds the `FastMCP` instance with providers, middleware, and auth; `run_server()` selects STDIO or HTTP transport
+- `src/core/app.py`: Re-exports `create_server()` for test access; no shared `mcp` singleton
+- `src/core/auth.py`: Configures `JWTVerifier` and optional `RemoteAuthProvider` from environment variables
+- `src/core/logging.py`: Logging configuration
+- `src/tools/*.py`: Tool implementations using `@tool` decorator from `fastmcp.tools`
+- `src/resources/*.py`: Resource implementations using `@resource` decorator from `fastmcp.resources`
+- `src/prompts/*.py`: Prompt definitions using `@prompt` decorator from `fastmcp.prompts`
+- `src/middleware/*.py`: Middleware classes extending `fastmcp.server.middleware.Middleware`
+- `src/*/examples/`: Example components (removed before deployment via `remove_examples.sh`)
+- `src/ops/deploy_cli.py`: Interactive OpenShift deployer using `oc`
+- `.fips-agents-cli/generators/`: Jinja2 templates for generating new components
 
-## Request flow
+### Tools Best Practices (FastMCP 3.x)
+
+All tools follow FastMCP best practices:
+
+- **Standalone Decorators**: Use `@tool` from `fastmcp.tools` -- no shared server instance needed
+- **Annotated Descriptions**: Use `Annotated[type, "description"]` for parameter documentation
+- **Field Validation**: Use Pydantic `Field` for constraints (ranges, lengths, patterns)
+- **Tool Annotations**: Provide hints about tool behavior:
+  - `readOnlyHint`: Tool doesn't modify state
+  - `idempotentHint`: Same inputs produce same outputs
+  - `destructiveHint`: Tool performs destructive operations
+  - `openWorldHint`: Tool accesses external systems
+- **Structured Output**: Use dataclasses for complex return types
+- **Error Handling**: Use `ToolError` for user-facing validation errors
+- **Context Parameter**: Include `ctx: Context` for logging and capabilities (sampling, elicitation)
+- **Auth Protection**: Use `@tool(auth=require_scopes("scope"))` for access control
+
+## Runtime Flow (HTTP)
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant Agent
-  participant Route as "OpenShift Route (TLS)"
-  participant Pod as "FastMCP HTTP server"
-  participant Tool as "Tool module (src/tools/*.py)"
-  participant Calc as "src/calc.py (shared helpers)"
-  participant SymPy
-
-  Agent->>Route: POST /mcp/ {tool call}
-  Route->>Pod: Forward
-  Pod->>Pod: JWTVerifier (if MCP_AUTH_JWT_ALG set)
-  Pod->>Tool: call_tool(name, params)
-  Tool->>Calc: parse_expression(user_string)
-  Calc->>SymPy: parse_expr(restricted namespace)
-  SymPy-->>Calc: sp.Expr
-  Calc-->>Tool: sp.Expr
-  Tool->>SymPy: diff / integrate / limit / series / solve / dsolve / simplify / N
-  SymPy-->>Tool: result expression
-  Tool->>Calc: format_result(expr, assumptions, extra)
-  Calc-->>Tool: {result, latex, is_exact, assumptions, ...}
-  Tool-->>Pod: dict
-  Pod-->>Agent: streamable-HTTP response
+  participant Client
+  participant Route
+  participant Service
+  participant Deployment as "FastMCP HTTP"
+  Client->>Route: HTTPS request to /mcp/
+  Route->>Service: Forward
+  Service->>Deployment: Forward
+  Deployment->>Deployment: JWTVerifier token validation (optional)
+  Deployment->>Deployment: FileSystemProvider discovers components
+  Deployment-->>Client: Streamable HTTP responses
 ```
 
-## The `src/calc.py` shared layer
-
-All eight tools delegate their cross-cutting concerns to one module so behaviour stays uniform:
-
-- **`parse_expression(str, context=...)`** — the single entry point for turning an untrusted string into a `sp.Expr`. Uses a restricted allowlist namespace (trig, hyperbolic, exp/log, roots, `erf`, `gamma`, `factorial`, constants `pi`/`E`/`oo`, plus inverse-trig `arcsin`/`arctan`/... and base-specific logs `log10`/`log2`). Arbitrary Python `eval` is not reachable.
-- **`parse_symbol(str, context=...)`** — a stricter parser for bare identifiers (variable names). Rejects expressions.
-- **`parse_substitutions(dict, context=...)`** — `{name: value_expr}` pairs, with both sides routed through the strict parsers.
-- **`format_result(expr, assumptions, extra)`** — builds the standard return dict (`result` / `latex` / `is_exact` / `assumptions`), with optional `extra` keys for tools that return sets (`solve_equation`) or per-term coefficients (`taylor_series`).
-- **`is_exact(expr)`** — heuristic: `True` iff the expression contains no `sp.Float`.
-
-### Parser design note: `split_symbols` is deliberately excluded
-
-SymPy's `implicit_multiplication_application` transformer bundles three rewrites: implicit multiplication (`2x → 2*x`), implicit function application, and **`split_symbols`** — which fractures multi-letter identifiers into products of single letters.
-
-`split_symbols` turns `log10(x)` into `l*o*g*10*x` and `arcsin(x)` into `a*c*i*n*r*s*x`, silently producing expressions the user never wrote. `src/calc.py` therefore uses `implicit_multiplication + implicit_application` without `split_symbols`, and adds `log10`, `log2`, `arcsin`, `arccos`, `arctan` (and hyperbolic inverses) to the allowlist so the common names resolve correctly. The tradeoff: `xy` is parsed as a single `Symbol("xy")` rather than `x*y`. Users write `x*y` explicitly instead.
-
-## Error contract
-
-Every user-facing failure is raised as `fastmcp.exceptions.ToolError` with a coaching message that states what went wrong *and* how to fix it. Examples:
-
-- Unbalanced parentheses → `"Could not parse expression: '...'. Parser said: ...  Check for balanced parentheses. Use '**' for exponents, ..."`
-- `^` for exponent → `"Use '**' for exponents, not '^'. In Python/SymPy '^' is bitwise XOR and silently produces wrong answers on integer inputs (2^3 = 1, not 8)."`
-- `solve_equation` can't find a closed form → `"SymPy couldn't find a closed form. Re-call with `numerical_near` set to an approximate value near the root you want."`
-- ODE outside SymPy's solvable classes → tells the agent to try simplification, a series solution via `taylor_series`, or (acknowledges) numerical methods aren't provided.
-
-The intent is that an agent reading the error can self-correct without a human intervention.
-
-## Return contract (detail)
-
-```python
-{
-    "result": str,          # SymPy string form, re-parseable via parse_expression
-    "latex": str,           # for display
-    "is_exact": bool,       # True for symbolic/exact, False for Float approximation
-    "assumptions": list[str],  # Notes surfaced to user (constants omitted,
-                               # singularities, directions disregarded, etc.)
-}
-```
-
-Extensions:
-- `solve_equation`: `solutions` (list[str]), `solutions_latex` (list[str]), `count` (int, `-1` for infinite family).
-- `taylor_series`: `coefficients` (list[str]) for powers `0..order-1`.
-- `evaluate_numeric`: `exact_form` (str) — the post-substitution symbolic form before `sp.N`.
-
-## Bootstrap
+## Server Bootstrap Flow
 
 ```mermaid
 flowchart TD
   A[src/main.py] --> B[create_server]
   B --> C[FileSystemProvider: src/tools/]
-  B --> D[FileSystemProvider: src/resources/ -- empty]
-  B --> E[FileSystemProvider: src/prompts/ -- empty]
-  B --> F[LoggingMiddleware]
-  B --> G[configure_auth -- optional JWT]
+  B --> D[FileSystemProvider: src/resources/]
+  B --> E[FileSystemProvider: src/prompts/]
+  B --> F[Configure middleware]
+  B --> G[configure_auth]
   B --> H[FastMCP instance]
   H --> I{MCP_TRANSPORT}
-  I -- stdio --> J[STDIO]
-  I -- http --> K[streamable-HTTP on 8080]
+  I -- stdio --> J[Run STDIO]
+  I -- http --> K[Run HTTP]
 ```
 
-`FileSystemProvider` discovers tools by scanning `src/tools/` for modules with `@tool`-decorated functions. With `MCP_HOT_RELOAD=1` it watches for file changes.
+Components are discovered at startup by `FileSystemProvider`, which scans directories for Python modules containing standalone `@tool`, `@resource`, and `@prompt` decorators. When `reload=True` (hot-reload mode), the provider watches for file changes and re-imports modified modules.
 
-`src/calc.py` is intentionally at `src/` (not `src/tools/`) so the scanner never tries to import it as a tool module.
+## OpenShift Build/Deploy
 
-## Deployment
+```mermaid
+flowchart TD
+  L[Local dir] -->|oc start-build --from-dir| B(BuildConfig Binary)
+  R[Git repo] -->|BuildConfig Git| B
+  B --> I(ImageStreamTag:latest)
+  I --> K(Deployment Image)
+  K --> S(Service)
+  S --> Rt(Route)
+```
+
+## Key Decisions
+
+- Use FastMCP 3.x standalone decorators: `@tool`, `@resource`, `@prompt` from their respective modules
+- No shared `mcp` instance -- components are self-contained modules discovered by `FileSystemProvider`
+- Auth uses FastMCP's built-in `JWTVerifier` + `RemoteAuthProvider`, with per-component `require_scopes()`
+- Middleware uses class-based `Middleware` subclasses, passed to `FastMCP(middleware=[...])` constructor
+- Python prompts in `src/prompts/` use Pydantic Field annotations for parameter descriptions
+- Resource registration requires explicit URI: `@resource("resource://...")`
+- Generator templates use Jinja2 and live in project (not CLI) for customization
+- OpenShift-native builds: prefer Binary Build for local projects without Git; Git Build also supported
+- Images pulled from internal registry `image-registry.openshift-image-registry.svc:5000/<ns>/<name>:latest`
+
+## Prompt System
+
+Prompts use standalone `@prompt` decorators for type safety and IDE support:
+
+- Location: `src/prompts/` directory
+- Pattern: Use `@prompt` decorator from `fastmcp.prompts`
+- Type annotations: Use `Field(description=...)` from Pydantic for parameters
+- Return types: Support `str`, `PromptMessage`, or `list[PromptMessage]`
+- Hot-reload: `FileSystemProvider(reload=True)` watches for changes in dev mode
+
+Example:
+```python
+from pydantic import Field
+from fastmcp.prompts import prompt
+
+@prompt
+def summarize(
+    document: str = Field(description="The document text to summarize"),
+) -> str:
+    return f"Summarize the following text:\n<document>{document}</document>"
+```
+
+## Middleware System
+
+Middleware uses class-based middleware extending the `Middleware` base class. Middleware instances are passed to the `FastMCP` constructor -- they are not auto-discovered.
+
+- Location: `src/middleware/` directory (for organization)
+- Registration: Instantiated and passed to `FastMCP(middleware=[...])` in `src/core/server.py`
+- Base class: `fastmcp.server.middleware.Middleware`
+- Override methods: `on_call_tool`, `on_list_tools`, `on_read_resource`, etc.
+
+Example:
+```python
+import mcp.types as mt
+from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from fastmcp.tools.tool import ToolResult
+
+class LoggingMiddleware(Middleware):
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[mt.CallToolRequestParams],
+        call_next: CallNext[mt.CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
+        tool_name = context.request.params.name
+        print(f"Executing: {tool_name}")
+        result = await call_next(context)
+        print(f"Completed: {tool_name}")
+        return result
+```
+
+## Authentication System
+
+Auth uses FastMCP's built-in authentication primitives:
+
+- `JWTVerifier`: Validates JWT tokens (supports HMAC, RSA, EC algorithms and JWKS endpoints)
+- `RemoteAuthProvider`: Wraps `JWTVerifier` with OAuth 2.0 Protected Resource metadata (RFC 9728)
+- `require_scopes()`: Per-component scope checks via the `auth` parameter on decorators
+
+Configuration is driven by environment variables in `src/core/auth.py`. Per-component authorization:
+
+```python
+from fastmcp.server.auth import require_scopes
+from fastmcp.tools import tool
+
+@tool(auth=require_scopes("admin"))
+async def admin_tool() -> str:
+    """Only accessible with admin scope."""
+    return "secret data"
+```
+
+## Generator System
+
+The generator system scaffolds new components using Jinja2 templates stored in the project:
+
+- Location: `.fips-agents-cli/generators/` directory
+- Component types: tool, resource, prompt, middleware
+- Templates: `component.py.j2` (implementation), `test.py.j2` (tests)
+- Customization: Templates are per-project and can be customized
+- CLI: `fips-agents generate <type> <name> [options]`
+
+Key features:
+- Generates both implementation and test files
+- Includes TODO comments and examples
+- Supports async/sync, authentication, context parameters
+- Follows FastMCP 3.x patterns (standalone decorators)
+- Templates use Jinja2 syntax for flexibility
+
+See [GENERATOR_PLAN.md](GENERATOR_PLAN.md) for comprehensive generator documentation.
+
+## Configuration
+
+Environment variables (selected):
+- `MCP_TRANSPORT` (stdio|http)
+- `MCP_HTTP_HOST`, `MCP_HTTP_PORT`, `MCP_HTTP_PATH`
+- `MCP_HTTP_ALLOWED_ORIGINS`
+- `MCP_AUTH_JWT_ALG`, `MCP_AUTH_JWT_SECRET`, `MCP_AUTH_JWT_PUBLIC_KEY`
+- `MCP_AUTH_JWT_JWKS_URI`, `MCP_AUTH_JWT_ISSUER`, `MCP_AUTH_JWT_AUDIENCE`
+- `MCP_AUTH_REQUIRED_SCOPES`
+- `MCP_AUTH_AUTHORIZATION_SERVERS`, `MCP_AUTH_BASE_URL`
+
+## CLI Deployment
+
+`mcp-deploy` prompts for namespace, app name, and HTTP settings, applies ImageStream/BuildConfig, performs a binary build, applies runtime manifests, sets env, waits for rollout, and prints the Route host.
+
+## Development Workflow
+
+The recommended workflow for developing MCP tools follows these phases:
 
 ```mermaid
 flowchart LR
-  Local[Local working tree] -->|oc start-build --from-dir| BC(BuildConfig, Binary)
-  BC --> IST(ImageStreamTag:latest)
-  IST --> Dep(Deployment)
-  Dep --> Svc(Service)
-  Svc --> Rt(Route, /mcp/)
+  A[Plan] --> B[Create]
+  B --> C[Exercise]
+  C --> D[Deploy]
+
+  A -->|TOOLS_PLAN.md| A
+  B -->|fips-agents generate| B
+  C -->|Role-play as consumer| C
+  D -->|make deploy| D
 ```
 
-`make deploy PROJECT=<ns>` runs `deploy.sh`, which creates the namespace if missing, applies `openshift.yaml` (ImageStream + BuildConfig + Deployment + Service + Route), and triggers a binary build from the local working tree. Because the cluster handles the build, local podman / platform architecture mismatches are irrelevant.
+### Phase 1: Plan Tools (`/plan-tools`)
 
-The deployed server runs with `MCP_TRANSPORT=http` on port 8080 inside the pod. The Route exposes `https://<host>/mcp/` externally with TLS termination at the edge.
+Before implementation:
+1. Read Anthropic's tool design guidance
+2. Create `TOOLS_PLAN.md` with specifications for each tool
+3. Get approval before writing code
 
-## Dependencies
+### Phase 2: Create Tools (`/create-tools`)
 
-| Package | Role |
-|---|---|
-| `sympy>=1.13` | The engine. Symbolic calculus, arbitrary-precision numerics (via bundled `mpmath`), LaTeX printing, ODE solving. |
-| `fastmcp>=3.2.0` | MCP server framework (providers, decorators, transports, auth). |
-| `python-dotenv`, `pyyaml`, `jinja2` | Config and scaffolding generator support (from the template base). |
-| `pytest`, `pytest-asyncio` | Test runner. |
+For each tool in the plan:
+1. Generate scaffold with `fips-agents generate tool`
+2. Implement the tool logic
+3. Write comprehensive tests
+4. Run tests to verify
 
-No external APIs, no databases, no network egress. The pod only needs cluster-internal image pulls and whatever ingress the Route carries.
+### Phase 3: Exercise Tools (`/exercise-tools`)
 
-## Testing strategy
+Test ergonomics by role-playing as the consuming agent:
+- Verify parameter names are intuitive
+- Check that error messages help with recovery
+- Ensure tools compose well together
 
-- **Unit**: `tests/tools/test_*.py` — one file per tool, covering happy path, parse errors, and each tool's tricky edge case (singularities for `taylor_series`, divergence for `integrate`, one-sided limit disagreement for `evaluate_limit`, etc.). 74 tests.
-- **End-to-end**: `tests/test_server_e2e.py` — spins up the real `FastMCP` server via `Client` (both in-process and streamable-HTTP), verifies the 8 expected tools are discovered, and round-trips two calls through the client API. 13 tests (the 8-way parameterized discovery test + 5 others).
-- **Auth / server infrastructure**: `tests/test_auth*.py`, `tests/test_server.py` — inherited from the FastMCP template, verify the bootstrap and JWT auth paths still wire up correctly.
-- **Regression guards**: two tests in `tests/tools/test_evaluate_numeric.py` and `tests/tools/test_solve_ode.py` specifically lock in fixes for silent correctness bugs (the `log10` mangling and the IC-function-name mismatch).
+### Phase 4: Deploy (`/deploy-mcp`)
 
-Total: 105 tests, all passing.
+Pre-deployment checklist:
+1. Fix file permissions: `find src -name "*.py" -perm 600 -exec chmod 644 {} \;`
+2. Run all tests
+3. Deploy to OpenShift: `make deploy PROJECT=<name>`
+4. Verify with `mcp-test-mcp`
 
-## Key design decisions
+## Known Issues
 
-1. **Strings in, dict out.** Math flows as Python/SymPy syntax strings — the cheapest serialization for an LLM. Results always come back as structured dicts rather than bare strings, so agents never have to guess what's exact vs approximate.
-2. **Shared parsing / formatting.** All eight tools route through `src/calc.py`. Without this, each subagent implementing a tool would invent slightly different error messages and subtly different return shapes.
-3. **Coaching errors over strict validation.** Every `ToolError` tells the agent *how to fix it*, not just *what failed*. Errors are recovery instructions.
-4. **Dual output (SymPy + LaTeX) always.** Rather than an `include_latex` flag, every response carries both. Agents can display LaTeX and chain SymPy without a second round-trip.
-5. **No pedagogical step-by-step output.** SymPy doesn't natively produce human-readable solution steps. Agents narrate the pedagogy; this server only computes.
-6. **Statelessness.** No session, no caching between calls. Scales horizontally by pod count; idempotent by construction.
+### File Permission Issue
+
+Files created by Claude Code subagents may have `600` permissions, preventing the OpenShift container from reading them. Always run the permission fix before deployment:
+
+```bash
+find src -name "*.py" -perm 600 -exec chmod 644 {} \;
+```
+
+### Import Conventions
+
+In FastMCP 3.x, components use standalone decorators and do not import a shared `mcp` instance. The `src.` prefix is still used for internal imports between core modules:
+
+```python
+# Component files use standalone decorators -- no server import needed
+from fastmcp.tools import tool
+
+@tool
+async def my_tool(param: str) -> str:
+    return f"Result: {param}"
+
+# Core modules still use src. prefix for internal imports
+from src.core.logging import get_logger
+```

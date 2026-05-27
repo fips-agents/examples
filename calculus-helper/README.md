@@ -1,327 +1,657 @@
-# Calculus Helper MCP Server
+# FastMCP Server Template
 
-An MCP server that offloads symbolic calculus to [SymPy](https://www.sympy.org) so LLM agents get *computed* answers — derivatives, integrals, limits, series, ODEs — instead of pattern-matched hallucinations. Every result comes back in both machine-readable SymPy form (safe to re-parse and chain) and LaTeX (for display).
+A production-ready MCP (Model Context Protocol) server template built on [FastMCP 3.x](https://gofastmcp.com), with filesystem-based component discovery, standalone decorators, and seamless OpenShift deployment.
 
-Built on [FastMCP 3.x](https://gofastmcp.com) with filesystem-based tool discovery, streamable-HTTP transport for OpenShift, and STDIO for local development.
+## Features
 
-## Tools
+- **Standalone decorators** (`@tool`, `@resource`, `@prompt`) with automatic filesystem discovery
+- **Resource subdirectories** for organizing related resources
+- **Python-based prompts** with type safety and Pydantic Field annotations
+- **Class-based middleware** for cross-cutting concerns
+- **Generator system** for scaffolding new components with non-interactive CLI
+- **Selective updates** - patch infrastructure without losing custom code
+- **One-command OpenShift deployment**
+- **Hot-reload** via `FileSystemProvider(reload=True)` for local development
+- **Local STDIO** and **OpenShift HTTP** transports
+- **JWT authentication** (optional) with built-in `JWTVerifier` and `RemoteAuthProvider`
+- **Full test suite** with pytest
 
-| Tool | Purpose |
-|---|---|
-| [`differentiate`](#differentiate) | Ordinary, partial, or higher-order derivatives, optionally evaluated at a point |
-| [`integrate`](#integrate) | Indefinite or definite integrals, with numerical fallback |
-| [`evaluate_limit`](#evaluate_limit) | Limits at a point or at infinity, from either side or two-sided |
-| [`taylor_series`](#taylor_series) | Taylor/Maclaurin expansion with per-term coefficients |
-| [`solve_equation`](#solve_equation) | Symbolic or numerical roots, optionally restricted by domain |
-| [`solve_ode`](#solve_ode) | Ordinary differential equations with optional initial conditions |
-| [`simplify_expression`](#simplify_expression) | Simplify / expand / factor / collect / trigsimp / logcombine |
-| [`evaluate_numeric`](#evaluate_numeric) | Substitute concrete values and compute to arbitrary precision |
+## Quick Start
 
-### Shared contract
-
-Every tool returns a dict with these keys:
-
-| Key | Type | Meaning |
-|---|---|---|
-| `result` | `str` | The answer in SymPy string form. Safe to pass back into another tool as input. |
-| `latex` | `str` | LaTeX rendering of `result`, for display. |
-| `is_exact` | `bool` | `true` for symbolic/exact answers (rationals, radicals, `oo`); `false` for `Float` approximations. |
-| `assumptions` | `list[str]` | Notes the tool made while computing — singularities hit, constants omitted, directions disregarded, etc. Surface these to the user. |
-
-Tools that return a set of answers (`solve_equation`) or structured auxiliary data (`taylor_series`) extend the dict with extra keys documented per-tool.
-
-### Input conventions
-
-All math is passed as **Python/SymPy syntax strings**:
-
-- `x**2` not `x^2` (the server rejects `^` with a coaching message — in SymPy `^` is bitwise XOR and `2^3 = 1`).
-- `sin(x)`, `cos(x)`, `exp(x)`, `log(x)` (natural log), `sqrt(x)`, `log10(x)`, `log2(x)`, `arcsin(x)`, `arctan(x)`.
-- Constants: `pi`, `E`, `oo` (or `inf` / `infinity`), `-oo`.
-- Parsing uses a restricted allowlist — no arbitrary Python `eval`.
-
----
-
-### `differentiate`
-
-Compute an ordinary, partial, or higher-order derivative. Supports evaluation at a point.
-
-**Parameters:**
-- `expression` (string, required) — the function to differentiate, e.g. `"x**2 * sin(y)"`.
-- `variables` (list[string], required) — differentiation variables, in order. `["x"]` → `df/dx`. `["x","x"]` → `d²f/dx²`. `["x","y"]` → mixed partial `∂²f/∂x∂y`.
-- `at_point` (dict[string,string], optional) — evaluate the derivative at this point, e.g. `{"x": "0", "y": "pi/2"}`.
-
-**Example:** slope of `x³ − 2x` at `x = 1`:
-```json
-{"expression": "x**3 - 2*x", "variables": ["x"], "at_point": {"x": "1"}}
-→ {"result": "1", "latex": "1", "is_exact": true, "assumptions": []}
-```
-
----
-
-### `integrate`
-
-Compute indefinite or definite integrals. If SymPy cannot close a definite integral symbolically, the tool falls back to high-precision numerical quadrature automatically.
-
-**Parameters:**
-- `expression` (string, required) — integrand.
-- `variable` (string, required) — variable of integration.
-- `lower_bound` (string, optional) — lower limit. Use `"-oo"` for −∞.
-- `upper_bound` (string, optional) — upper limit. Must be present iff `lower_bound` is.
-- `numerical` (bool, optional, default `false`) — skip symbolic and go straight to numerical.
-
-**Bound ordering**: if `lower_bound > upper_bound`, the result is the *negative* of the swapped integral, per the standard convention `∫[a,b] = −∫[b,a]`. This is mathematically correct, not a bug.
-
-**Example:** `∫₀¹ e^(−x²) dx`:
-```json
-{"expression": "exp(-x**2)", "variable": "x", "lower_bound": "0", "upper_bound": "1"}
-→ {"result": "sqrt(pi)*erf(1)/2", "is_exact": true, ...}
-```
-
----
-
-### `evaluate_limit`
-
-Compute a limit at a finite point or at ±∞, from either side or two-sided.
-
-**Parameters:**
-- `expression` (string, required).
-- `variable` (string, required).
-- `point` (string, required) — the limit point. `"oo"` / `"-oo"` for infinity.
-- `direction` (`"left"` | `"right"` | `"both"`, default `"both"`).
-
-**Behaviour:** for `direction="both"` at a finite point, the tool computes left and right limits separately and compares them. If they disagree, `result` is `"nan"` with the two one-sided values listed in `assumptions`. At infinity, `direction` is ignored and a note is added.
-
-**Example:** `lim_{x→0} sin(x)/x`:
-```json
-{"expression": "sin(x)/x", "variable": "x", "point": "0"}
-→ {"result": "1", "is_exact": true, ...}
-```
-
----
-
-### `taylor_series`
-
-Compute the Taylor/Maclaurin expansion to a specified order. Returns both the truncated polynomial *and* a coefficient list for term-wise reasoning.
-
-**Parameters:**
-- `expression` (string, required).
-- `variable` (string, required).
-- `around` (string, optional, default `"0"`) — expansion point.
-- `order` (int, optional, default `6`, 1–20) — truncation order.
-
-**Extra return keys:** `coefficients` (list[string]) — coefficients of powers `0` through `order-1`.
-
-**Errors:** raises `ToolError` if the function is not analytic at `around` (pole, branch point).
-
-**Example:** `sin(x)` at 0 to order 6:
-```json
-{"expression": "sin(x)", "variable": "x", "order": 6}
-→ {"result": "x**5/120 - x**3/6 + x",
-   "coefficients": ["0", "1", "0", "-1/6", "0", "1/120"], ...}
-```
-
----
-
-### `solve_equation`
-
-Find roots symbolically (preferred) or numerically (via `numerical_near`).
-
-**Parameters:**
-- `equation` (string, required) — either `"lhs = rhs"` or just `"expr"` (taken as `expr = 0`).
-- `variable` (string, required).
-- `domain` (`"real"` | `"complex"` | `"positive"`, default `"complex"`).
-- `numerical_near` (string, optional) — seed value for `nsolve` when symbolic solving fails (e.g. transcendental equations).
-
-**Extra return keys:**
-- `solutions` (list[string]) — each solution as a SymPy string.
-- `solutions_latex` (list[string]).
-- `count` (int) — number of solutions; `-1` for an infinite family (with a representative in `solutions` and a describer in `assumptions`).
-
-**Example:** critical points — first differentiate, then solve:
-```json
-{"equation": "3*x**2 - 12*x + 9", "variable": "x", "domain": "real"}
-→ {"solutions": ["1", "3"], "count": 2, ...}
-```
-
----
-
-### `solve_ode`
-
-Solve an ODE symbolically, optionally applying initial conditions.
-
-**Parameters:**
-- `equation` (string, required) — accepts prime notation `f'(x)`, `f''(x)` and explicit `Derivative(f(x), x, x)`.
-- `function` (string, required) — name of the unknown, e.g. `"f"`. Must match what's used in `equation`.
-- `variable` (string, required) — independent variable.
-- `initial_conditions` (dict[string,string], optional) — e.g. `{"f(0)": "1", "f'(0)": "0"}`. IC keys must use the same function name as `function`.
-
-**Assumptions field** includes the SymPy classification SymPy used (e.g. `"classified as: nth_linear_constant_coeff_homogeneous"`).
-
-**Example:** simple-harmonic-oscillator IVP:
-```json
-{"equation": "f''(x) + f(x) = 0", "function": "f", "variable": "x",
- "initial_conditions": {"f(0)": "1", "f'(0)": "0"}}
-→ {"result": "Eq(f(x), cos(x))", ...}
-```
-
----
-
-### `simplify_expression`
-
-Rewrite an expression in one of six canonical forms.
-
-**Parameters:**
-- `expression` (string, required).
-- `form` (`"simplify"` | `"expand"` | `"factor"` | `"collect"` | `"trigsimp"` | `"logcombine"`, required).
-- `variable` (string, optional) — required when `form="collect"` (the variable to group by); ignored otherwise.
-
-**Example:** Pythagorean identity:
-```json
-{"expression": "sin(x)**2 + cos(x)**2", "form": "simplify"}
-→ {"result": "1", "is_exact": true, ...}
-```
-
----
-
-### `evaluate_numeric`
-
-Substitute values and compute to high precision. Replaces LLM-hallucinated arithmetic.
-
-**Parameters:**
-- `expression` (string, required).
-- `substitutions` (dict[string,string], optional) — values may themselves be SymPy expressions (`"sqrt(2)"`, `"pi/4"`).
-- `precision` (int, optional, default `15`, max `50`) — significant decimal digits.
-
-**Extra return keys:** `exact_form` — the post-substitution symbolic form before numerical evaluation.
-
-**Agent aid:** if any key in `substitutions` doesn't match a symbol in the expression (typical agent typo), it's noted in `assumptions` as having had no effect.
-
-**Example:** evaluate Taylor polynomial at a point:
-```json
-{"expression": "x**4/24 - x**2/2 + 1", "substitutions": {"x": "1/10"}}
-→ {"result": "0.995004166666667", "exact_form": "238801/240000", ...}
-```
-
----
-
-## Quickstart
-
-### Local development
+### Local Development
 
 ```bash
-# Install dependencies (creates .venv)
+# Install and run locally
 make install
-
-# Run locally in STDIO mode with hot-reload
 make run-local
 
-# In another terminal, list tools with cmcp
+# Test with cmcp (in another terminal)
 cmcp ".venv/bin/python -m src.main" tools/list
-
-# Call a tool
-cmcp ".venv/bin/python -m src.main" tools/call differentiate \
-  '{"expression": "x**2", "variables": ["x"]}'
-```
-
-### Testing
-
-```bash
-# Run the full test suite
-make test
-
-# Run tests for a single tool
-.venv/bin/pytest tests/tools/test_integrate.py -v
-
-# Run end-to-end tests (actual FastMCP server process)
-.venv/bin/pytest tests/test_server_e2e.py -v
 ```
 
 ### Deploy to OpenShift
 
 ```bash
-# One-time per deployment target
-make deploy PROJECT=calculus-helper-mcp
+# IMPORTANT: Remove examples before first deployment
+./remove_examples.sh
+
+# One-command deployment
+make deploy
+
+# Or deploy to specific project
+make deploy PROJECT=my-project
 ```
 
-The deploy uses OpenShift's internal image registry and BuildConfig — no local podman build required. The server runs on port 8080 inside the cluster with streamable-HTTP transport; the Route exposes `/mcp/` with TLS termination.
+> **Note**: Running `./remove_examples.sh` before deployment removes example code and cache files, significantly reducing build context size and preventing deployment timeouts.
 
-### Connect a client
+## Claude Code Workflow
 
-For an MCP client pointing at a deployed instance:
+This template includes slash commands for Claude Code that provide a structured workflow for developing MCP tools.
 
+### Recommended Sequence
+
+```
+/plan-tools          ->  TOOLS_PLAN.md (planning, no code)
+        |
+/create-tools        ->  Generate + implement tools in parallel
+        |
+/exercise-tools      ->  Test ergonomics as consuming agent
+        |
+/deploy-mcp PROJECT=x  ->  Deploy to OpenShift (optional)
+```
+
+### Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/plan-tools` | Reads [Anthropic's tool design guidance](https://www.anthropic.com/engineering/writing-tools-for-agents) and your proposal, then creates `TOOLS_PLAN.md` with tool specifications. Planning only - no code. |
+| `/create-tools` | Reads `TOOLS_PLAN.md`, generates scaffolds with `fips-agents`, and implements each tool in parallel using subagents for efficiency. |
+| `/exercise-tools` | Role-plays as the agent that will consume these tools, testing ergonomics, error messages, and composability. Provides structured feedback and makes improvements. |
+| `/deploy-mcp PROJECT=name` | Runs pre-flight checks (permissions, tests), deploys to OpenShift, and verifies with `mcp-test-mcp`. |
+
+### When to Use Each Command
+
+- **Starting a new MCP server**: Run `/plan-tools` first to design your tools before writing any code
+- **After planning is approved**: Run `/create-tools` to implement everything in parallel
+- **Before deployment**: Run `/exercise-tools` to catch usability issues
+- **For remote MCP servers**: Run `/deploy-mcp` to deploy to OpenShift
+
+See [CLAUDE.md](CLAUDE.md) for detailed documentation on the workflow, known issues, and troubleshooting.
+
+## Project Structure
+
+```
+src/
+  core/           # Server bootstrap and auth configuration
+  tools/          # Tool implementations (standalone @tool decorators)
+    examples/     # Example tools (removed before deployment)
+  resources/      # Resource implementations (supports subdirectories)
+    examples/     # Example resources
+  prompts/        # Python-based prompt definitions
+    examples/     # Example prompts
+  middleware/     # Middleware classes
+tests/            # Test suite
+.fips-agents-cli/ # Generator templates
+.template-info    # Template version tracking (for updates)
+Containerfile     # Container definition
+openshift.yaml    # OpenShift manifests
+deploy.sh         # Deployment script
+requirements.txt  # Python dependencies
+Makefile          # Common tasks
+```
+
+## Development
+
+### Adding Tools
+
+Create a Python file in `src/tools/`. Tools use the standalone `@tool` decorator from FastMCP 3.x -- no shared server instance needed:
+
+```python
+from typing import Annotated
+from pydantic import Field
+from fastmcp import Context
+from fastmcp.tools import tool
+from fastmcp.exceptions import ToolError
+
+@tool(
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
+)
+async def my_tool(
+    param: Annotated[str, Field(description="Parameter description", min_length=1, max_length=100)],
+    ctx: Context,
+) -> str:
+    """Tool description for the LLM."""
+    await ctx.info("Processing request")
+
+    if not param.strip():
+        raise ToolError("Parameter cannot be empty")
+
+    return f"Result: {param}"
+```
+
+**Best Practices:**
+- Use `Annotated` for parameter descriptions
+- Add Pydantic `Field` constraints for validation
+- Use tool `annotations` for hints about behavior
+- Include `ctx: Context` for logging and capabilities
+- Raise `ToolError` for user-facing validation errors
+- Use structured output (dataclasses) for complex results
+
+**Auth-protected tools:**
+
+```python
+from fastmcp.server.auth import require_scopes
+from fastmcp.tools import tool
+
+@tool(auth=require_scopes("admin"))
+async def admin_tool() -> str:
+    """Only accessible with admin scope."""
+    return "secret data"
+```
+
+**Generator examples:**
+
+> **Note**: `fips-agents` is a global CLI tool (installed via pipx). Run it directly - do NOT use `.venv/bin/fips-agents`.
+
+```bash
+# Simple tool
+fips-agents generate tool my_tool \
+    --description "Tool description" \
+    --async
+
+# Tool with context
+fips-agents generate tool search_documents \
+    --description "Search through documents" \
+    --async \
+    --with-context
+
+# Tool with authentication
+fips-agents generate tool protected_operation \
+    --description "Protected operation" \
+    --async \
+    --with-auth
+
+# Tool with parameters from JSON file
+fips-agents generate tool complex_tool \
+    --description "Complex tool with multiple params" \
+    --params params.json \
+    --with-context
+
+# Advanced tool with all options
+fips-agents generate tool advanced_tool \
+    --description "Advanced tool example" \
+    --async \
+    --with-context \
+    --with-auth \
+    --return-type "dict" \
+    --read-only \
+    --idempotent
+```
+
+### Adding Resources
+
+Resources can be organized in subdirectories for better structure. Create files in `src/resources/` or any subdirectory:
+
+**Simple resource:**
+```python
+from fastmcp.resources import resource
+
+@resource("resource://my-resource")
+async def get_my_resource() -> str:
+    return "Resource content"
+```
+
+**JSON resource with metadata:**
+```python
+from fastmcp.resources import resource
+
+@resource(
+    "data://config",
+    mime_type="application/json",
+    description="Application configuration data"
+)
+async def get_config() -> dict:
+    return {"version": "1.0", "features": ["tools", "resources"]}
+```
+
+**Resource template (parameterized):**
+```python
+from fastmcp.resources import resource
+
+@resource("weather://{city}/current")
+async def get_weather(city: str) -> dict:
+    """Weather information for a specific city."""
+    return {"city": city, "temperature": 22, "condition": "Sunny"}
+```
+
+**Organizing resources in subdirectories:**
+```
+src/resources/
+  country_profiles/
+    __init__.py
+    japan.py          # country-profiles://JP
+    france.py         # country-profiles://FR
+  checklists/
+    __init__.py
+    travel.py         # travel-checklists://first-trip
+  emergency_protocols/
+    __init__.py
+    passport.py       # emergency-protocols://passport-lost
+```
+
+**Generator examples:**
+```bash
+# Simple resource
+fips-agents generate resource my_resource \
+    --description "My resource description" \
+    --uri "resource://my-resource" \
+    --mime-type "text/plain"
+
+# JSON resource
+fips-agents generate resource config_data \
+    --description "Application configuration" \
+    --uri "data://config" \
+    --mime-type "application/json"
+
+# Resource in subdirectory (creates country_profiles/japan.py)
+fips-agents generate resource country-profiles/japan \
+    --description "Japan country profile" \
+    --uri "country-profiles://JP" \
+    --mime-type "application/json"
+
+# Resource template with async and context
+fips-agents generate resource weather \
+    --async \
+    --with-context \
+    --description "Weather data by city" \
+    --uri "weather://{city}/current" \
+    --mime-type "application/json"
+```
+
+Subdirectories are automatically discovered by `FileSystemProvider` -- no manual registration needed.
+
+### Creating Prompts
+
+Create Python files in `src/prompts/`. Prompts use the standalone `@prompt` decorator:
+
+**Basic String Prompt:**
+```python
+from pydantic import Field
+from fastmcp.prompts import prompt
+
+@prompt
+def my_prompt(
+    query: str = Field(description="User query"),
+) -> str:
+    """Purpose of this prompt"""
+    return f"Please answer: {query}"
+```
+
+**Async Prompt with Context:**
+```python
+from pydantic import Field
+from fastmcp import Context
+from fastmcp.prompts import prompt
+
+@prompt
+async def fetch_prompt(
+    url: str = Field(description="Data source URL"),
+    ctx: Context = None,
+) -> str:
+    """Fetch data and create prompt"""
+    return f"Analyze data from {url}"
+```
+
+**Structured Message Prompt:**
+```python
+from pydantic import Field
+from fastmcp.prompts.prompt import PromptMessage, TextContent
+from fastmcp.prompts import prompt
+
+@prompt
+def structured_prompt(
+    task: str = Field(description="Task description"),
+) -> PromptMessage:
+    """Create structured message"""
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=f"Task: {task}")
+    )
+```
+
+**Advanced with Metadata:**
+```python
+from pydantic import Field
+from fastmcp.prompts import prompt
+
+@prompt(
+    name="custom_name",
+    title="Human Readable Title",
+    description="Custom description",
+    tags={"analysis", "reporting"},
+    meta={"version": "1.0", "author": "team"}
+)
+def advanced_prompt(
+    data: dict[str, str] = Field(description="Data to process"),
+) -> str:
+    """Advanced prompt with full metadata"""
+    return f"Analyze: {data}"
+```
+
+**Generator Examples:**
+```bash
+# Basic prompt
+fips-agents generate prompt summarize_text \
+    --description "Summarize text content"
+
+# Async with Context
+fips-agents generate prompt fetch_and_analyze \
+    --async --with-context \
+    --return-type PromptMessage
+
+# With parameters file
+fips-agents generate prompt analyze_data \
+    --params params.json --with-schema
+
+# Advanced with metadata
+fips-agents generate prompt report_generator \
+    --async --with-context \
+    --prompt-name "generate_report" \
+    --title "Report Generator" \
+    --tags "reporting,analysis" \
+    --meta '{"version": "2.0"}'
+```
+
+**Return Types:**
+- `str` - Simple string prompt (default)
+- `PromptMessage` - Structured message with role
+- `list[PromptMessage]` - Multi-turn conversation
+- `PromptResult` - Full prompt result object
+
+See [CLAUDE.md](CLAUDE.md) for comprehensive prompt generation documentation and `src/prompts/` for working examples.
+
+### Adding Middleware
+
+Middleware in FastMCP 3.x uses class-based middleware that extends the `Middleware` base class. Create a file in `src/middleware/` and register it in `src/core/server.py`:
+
+```python
+import mcp.types as mt
+from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from fastmcp.tools.tool import ToolResult
+
+class MyMiddleware(Middleware):
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[mt.CallToolRequestParams],
+        call_next: CallNext[mt.CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
+        # Pre-execution logic
+        result = await call_next(context)
+        # Post-execution logic
+        return result
+```
+
+Middleware is passed to the `FastMCP` constructor in `src/core/server.py`:
+
+```python
+from fastmcp.server.middleware.logging import LoggingMiddleware
+
+mcp = FastMCP(
+    name,
+    middleware=[LoggingMiddleware(), MyMiddleware()],
+    ...
+)
+```
+
+**Generator examples:**
+```bash
+# Async middleware
+fips-agents generate middleware logging_middleware \
+    --description "Request logging middleware" \
+    --async
+
+# Sync middleware
+fips-agents generate middleware rate_limiter \
+    --description "Rate limiting middleware" \
+    --sync
+```
+
+## Testing
+
+### Local Testing (STDIO)
+
+```bash
+# Run server
+make run-local
+
+# Test with cmcp
+make test-local
+
+# Run unit tests
+make test
+```
+
+### OpenShift Testing (HTTP)
+
+```bash
+# Deploy
+make deploy
+
+# Test with MCP Inspector
+npx @modelcontextprotocol/inspector https://<route-url>/mcp/
+```
+
+See [TESTING.md](TESTING.md) for detailed testing instructions.
+
+## Keeping Projects Updated
+
+This template is actively maintained with improvements to infrastructure, generators, and documentation. You can selectively update your project from template changes without losing your custom code.
+
+### Check for Updates
+
+```bash
+# See what's changed since project creation
+fips-agents patch check
+```
+
+This shows available updates organized by category (generators, core, docs, build).
+
+### Update Specific Categories
+
+```bash
+# Update generator templates (safe - your code is untouched)
+fips-agents patch generators
+
+# Update core infrastructure (shows diffs, asks for approval)
+fips-agents patch core
+
+# Update documentation and examples (safe)
+fips-agents patch docs
+
+# Update build and deployment files (shows diffs, asks for approval)
+fips-agents patch build
+
+# Preview changes without applying (dry run)
+fips-agents patch core --dry-run
+```
+
+### Update Everything
+
+```bash
+# Interactively update all categories
+fips-agents patch all
+
+# Skip confirmation prompts (use with caution)
+fips-agents patch all --skip-confirmation
+```
+
+### What Gets Updated
+
+**Automatically updated (no confirmation):**
+- `.fips-agents-cli/generators/` - Code generator templates
+- `docs/` - Documentation files
+- Example files in `src/*/examples/`
+
+**Asks before updating (shows diffs):**
+- `src/core/server.py` - Server bootstrap code
+- `src/*/__ init__.py` - Package initialization files
+- `Makefile`, `Containerfile`, `openshift.yaml` - Build files
+
+**Never updated (your code is protected):**
+- `src/tools/*.py` - Your tool implementations
+- `src/resources/*.py` - Your resource implementations
+- `src/prompts/*.py` - Your prompt definitions
+- `src/middleware/*.py` - Your middleware implementations
+- `tests/` - Your test files
+- `README.md`, `pyproject.toml`, `.env` - Project configuration
+- `src/core/app.py`, `src/core/auth.py`, `src/core/logging.py` - User-customizable core files
+
+### Example: Adding New Template Capabilities
+
+Imagine the template adds new authentication capabilities in a future update:
+
+```bash
+# Check what's new
+fips-agents patch check
+
+# Pull in updated generators so you can generate auth-enabled tools
+fips-agents patch generators
+
+# Review and apply core infrastructure updates
+fips-agents patch core  # Shows diffs, you decide what to apply
+
+# Your existing tools, resources, and prompts remain untouched!
+```
+
+The `.template-info` file tracks which template version your project was created from, enabling smart updates.
+
+## Transport Architecture
+
+MCP supports multiple transport protocols. **The server defines which transport to expose**--clients must connect using the matching transport type.
+
+### How It Works
+
+The `MCP_TRANSPORT` environment variable controls which transport the server runs:
+
+| Transport | Use Case | Client Connection |
+|-----------|----------|-------------------|
+| `stdio` | Local development, CLI tools like `cmcp` | Spawns server as subprocess |
+| `http` | Remote access, OpenShift deployment | HTTP request to `http://host:port/mcp/` |
+
+The same codebase supports both transports. The server reads `MCP_TRANSPORT` at startup and exposes only that transport--there's no negotiation or auto-detection.
+
+### Local Development (STDIO)
+
+```bash
+# Server runs in STDIO mode (default)
+MCP_TRANSPORT=stdio .venv/bin/python -m src.main
+
+# Client spawns the server as a subprocess
+cmcp ".venv/bin/python -m src.main" tools/list
+```
+
+STDIO is ideal for local testing because the client manages the server lifecycle directly.
+
+### Remote Deployment (HTTP)
+
+```bash
+# Server runs in HTTP mode
+MCP_TRANSPORT=http MCP_HTTP_HOST=0.0.0.0 MCP_HTTP_PORT=8080 python -m src.main
+
+# Client connects via HTTP
+# (configure your MCP client to use the HTTP endpoint)
+```
+
+In OpenShift, the Containerfile sets `MCP_TRANSPORT=http` automatically. The Route exposes the `/mcp/` endpoint with TLS termination.
+
+### Client Configuration
+
+Your MCP client configuration must specify the correct transport:
+
+**For STDIO (local):**
 ```json
 {
   "mcpServers": {
-    "calculus-helper": {
-      "url": "https://<route-host>/mcp/"
+    "my-server": {
+      "command": ".venv/bin/python",
+      "args": ["-m", "src.main"]
     }
   }
 }
 ```
 
-The trailing slash matters.
-
-### System prompt for consuming agents
-
-[`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) is a ready-to-use system prompt for an LLM agent that will call these tools. It covers the "always use the tool, never compute in-head" discipline, the shared return-dict contract, per-tool usage guidance, composition patterns, an error-recovery table mapping each coaching message to the fix, and worked examples. Drop it into your agent's system role (or adapt it) — it's grounded in what the tools actually do, not generic math-assistant boilerplate.
-
-## Project layout
-
-```
-src/
-  core/
-    server.py     # create_server() + run_server(): providers, middleware, auth
-    auth.py       # Optional JWT auth via FastMCP's JWTVerifier
-    logging.py
-  tools/
-    differentiate.py, integrate.py, evaluate_limit.py, taylor_series.py,
-    solve_equation.py, solve_ode.py, simplify_expression.py, evaluate_numeric.py
-  calc.py         # Shared parsing + output-dict formatting for all 8 tools
-  main.py         # Entry point: creates server, runs selected transport
-tests/
-  tools/          # Per-tool unit tests (74 tests)
-  test_server_e2e.py    # Full FastMCP-client end-to-end tests
-  test_server.py, test_auth*.py  # Infrastructure tests
-Containerfile, openshift.yaml, deploy.sh, Makefile
+**For HTTP (remote):**
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "url": "https://my-server-route.apps.cluster.example.com/mcp/"
+    }
+  }
+}
 ```
 
-All 8 tools delegate their parsing and result-formatting to `src/calc.py`. This centralizes the restricted-namespace parser (which deliberately excludes SymPy's `split_symbols` transformer to avoid silently shredding multi-letter names like `log10` into `l*o*g*10`) and the standard return-dict contract.
+## Environment Variables
 
-## Environment variables
+### Local Development
+- `MCP_TRANSPORT=stdio` - Use STDIO transport
+- `MCP_HOT_RELOAD=1` - Enable hot-reload
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `MCP_TRANSPORT` | `stdio` | Transport: `stdio` (local) or `http` (OpenShift, set in the Containerfile). |
-| `MCP_HTTP_HOST` | `127.0.0.1` | HTTP bind address. |
-| `MCP_HTTP_PORT` | `8000` | HTTP port (8080 in-container). |
-| `MCP_HTTP_PATH` | `/mcp/` | HTTP endpoint path. |
-| `MCP_LOG_LEVEL` | `INFO` | Logging level. |
-| `MCP_HOT_RELOAD` | `0` | `1` enables `FileSystemProvider` watch-and-reload for dev. |
+### OpenShift Deployment
+- `MCP_TRANSPORT=http` - Use HTTP transport (set in Containerfile)
+- `MCP_HTTP_HOST=0.0.0.0` - HTTP server host
+- `MCP_HTTP_PORT=8080` - HTTP server port
+- `MCP_HTTP_PATH=/mcp/` - HTTP endpoint path
 
-JWT auth is configurable via `MCP_AUTH_JWT_*` variables; see `src/core/auth.py`. Auth is disabled when no `MCP_AUTH_JWT_ALG` is set.
+### Optional Authentication
+- `MCP_AUTH_JWT_ALG` - JWT algorithm (RS256, HS256, etc.)
+- `MCP_AUTH_JWT_SECRET` - JWT secret for symmetric signing
+- `MCP_AUTH_JWT_PUBLIC_KEY` - JWT public key for asymmetric
+- `MCP_AUTH_JWT_JWKS_URI` - JWKS endpoint URL
+- `MCP_AUTH_JWT_ISSUER` - Expected token issuer
+- `MCP_AUTH_JWT_AUDIENCE` - Expected token audience
+- `MCP_AUTH_REQUIRED_SCOPES` - Comma-separated required scopes
+- `MCP_AUTH_AUTHORIZATION_SERVERS` - Comma-separated authorization server URLs
+- `MCP_AUTH_BASE_URL` - This server's base URL for OAuth metadata
 
-## Adding another tool
-
-If you need a ninth tool, scaffold it with:
+## Available Commands
 
 ```bash
-fips-agents generate tool my_tool --description "..." --async --with-context
+make help         # Show all available commands
+make install      # Install dependencies
+make run-local    # Run locally with STDIO
+make test         # Run test suite
+make deploy       # Deploy to OpenShift
+make clean        # Clean up OpenShift deployment
 ```
 
-This creates `src/tools/my_tool.py` plus a test scaffold in `tests/tools/`. Import the shared helpers from `src/calc.py` — do not call `sp.sympify()` directly on user strings:
+## Architecture
 
-```python
-from src.calc import parse_expression, parse_symbol, format_result
-```
+The server uses [FastMCP 3.x](https://gofastmcp.com) with:
+- `FileSystemProvider` for automatic discovery of tools, resources, and prompts
+- Standalone decorators (`@tool`, `@resource`, `@prompt`) -- no shared server instance needed
+- Hot-reload via `FileSystemProvider(reload=True)` in development mode
+- Class-based middleware passed to the `FastMCP` constructor
+- Built-in `JWTVerifier` and `RemoteAuthProvider` for authentication
+- Generator system with Jinja2 templates for scaffolding
+- Support for both STDIO (local) and HTTP (OpenShift) transports
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full request/response flow and design decisions.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture information and [GENERATOR_PLAN.md](GENERATOR_PLAN.md) for generator system documentation.
 
 ## Requirements
 
 - Python 3.11+
 - OpenShift CLI (`oc`) for deployment
-- `cmcp` for local STDIO testing (`pip install cmcp`)
+- cmcp for local testing: `pip install cmcp`
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started, development setup, and submission guidelines.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

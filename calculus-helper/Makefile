@@ -7,8 +7,8 @@ PROJECT ?= mcp-demo
 
 # Default target
 help:
-	@echo "calculus-helper MCP server - Available Commands"
-	@echo "================================================"
+	@echo "MCP Server Template - Available Commands"
+	@echo "========================================"
 	@echo "Local Development:"
 	@echo "  make install     - Install dependencies"
 	@echo "  make run-local   - Run server locally (STDIO mode)"

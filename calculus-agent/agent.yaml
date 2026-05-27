@@ -51,6 +51,21 @@ model:
   temperature: 0.7
   max_tokens: 4096
 
+  # -- Per-turn resource limits (optional) --------------------------------------
+  #
+  # Hard ceilings checked after each model call in astep_stream(). When a limit
+  # is reached, the turn completes with finish_reason="limit" and an audit log
+  # event is emitted. All limits are optional; omit or set to null to disable.
+  #
+  # Production env vars:
+  #   LIMITS_MAX_TOKENS_PER_TURN      -- token cap per turn
+  #   LIMITS_MAX_ITERATIONS_PER_TURN  -- iteration cap per turn
+  #   LIMITS_MAX_COST_PER_TURN_USD    -- cost cap per turn (USD)
+  # limits:
+  #   max_tokens_per_turn: ${LIMITS_MAX_TOKENS_PER_TURN:-}
+  #   max_iterations_per_turn: ${LIMITS_MAX_ITERATIONS_PER_TURN:-}
+  #   max_cost_per_turn_usd: ${LIMITS_MAX_COST_PER_TURN_USD:-}
+
 # -- Platform mode (optional, OGX / LlamaStack delegation) -------------------
 #
 # Opt in to OGX's /v1/responses endpoint instead of /v1/chat/completions.
@@ -125,6 +140,30 @@ tools:
 prompts:
   dir: ./prompts
   system: system          # prompt file to load as the system prompt (prompts/system.md)
+
+# -- Prompt assembly (optional, layered mode) ----------------------------------
+#
+# When present, replaces the flat system-prompt concatenation with named
+# layers: identity (who the agent IS), personality (HOW it behaves),
+# governance (rules/), and capabilities (skills/).  Each layer has
+# explicit precedence and is tracked in an audit log.
+#
+# When absent, the current behavior is preserved:
+#   1. prompts/system.md as the system prompt
+#   2. rules/*.md concatenated
+#   3. skill manifests appended
+#
+prompt_assembly:
+  identity:
+    source: identity.md
+    # inline: |                     # or provide identity inline (takes precedence)
+    #   You are DocBot, a document processing agent.
+    enabled: true
+  personality:
+    source: personality.md
+    enabled: false                  # enable to activate personality layer
+  governance_enabled: true          # layer 2 (rules/ directory)
+  capabilities_enabled: true        # layer 3 (skills/ directory)
 
 # -- Agent loop ----------------------------------------------------------------
 #
@@ -227,6 +266,18 @@ server:
   #   agent_tokens_total
   metrics:
     enabled: ${METRICS_ENABLED:-false}
+
+  # -- Message compaction (#166) -----------------------------------------------
+  # compaction:
+  #   enabled: ${COMPACTION_ENABLED:-false}
+  #   backend: null          # null (no-op) | llm (model-driven summarisation)
+  #   threshold_messages: 50
+
+  # -- Permission policy (#164) ------------------------------------------------
+  # permissions:
+  #   source: null           # null (allow-all) | static (config-driven rules)
+  #   default_action: allow
+  #   rules: []
 
   # -- User feedback collection (optional) --------------------------------------
   #
@@ -421,6 +472,47 @@ server:
       # retrieval_top_k: 5
       # retrieval_min_score: 0.0
 
+  # -- Work-item pool (multi-agent coordination) ---------------------------------
+  #
+  # Enables lease-based work-item coordination between agents. Agents can
+  # check out, complete, and release work items from a shared pool.
+  #
+  # When enabled, five stock LLM tools are auto-registered:
+  #   check_available_work, checkout_work_item, complete_work_item,
+  #   release_work_item, update_work_progress
+  #
+  # work_items:
+  #   enabled: ${WORK_ITEMS_ENABLED:-false}
+  #   # backend: ${WORK_ITEMS_BACKEND:-}  # inherits storage.backend
+  #   lease_duration_seconds: 300
+  #   budget_headroom_pct: 10.0
+  #   expire_check_interval_seconds: 60
+  #   capabilities: []
+  #     # - name: "mcp:web_search"
+  #     # - name: "skill:code_review"
+  #     # - name: "trust"
+  #     #   value: 3
+
+  # -- Event sources (optional) ------------------------------------------------
+  #
+  # Inbound event sources that trigger agent processing via event_handler().
+  # Supported types: webhook, cron, kafka, redis.
+  #
+  # event_sources:
+  #   - type: cron
+  #     source_id: daily-health-check
+  #     schedule: "0 6 * * *"          # 6 AM UTC daily
+  #     event_type: scheduled_health_check
+  #
+  #   - type: webhook
+  #     source_id: github-events
+  #     path: /webhooks/github
+  #     secret: ${WEBHOOK_SECRET}
+  #
+  # event_sink:
+  #   type: log
+  #   level: INFO
+
 # -- Memory backend (optional) -----------------------------------------------
 #
 # Controls which memory backend the agent uses.
@@ -493,6 +585,84 @@ security:
 #  guardrails:
 #    mode: observe     # override global mode for guardrails
 
+# -- Self-healing (optional) --------------------------------------------------
+#
+# Enables agent self-improvement via learned skills. When enabled, three
+# stock LLM tools are auto-registered: learn_skill, suggest_skill,
+# rollback_skill.
+#
+# suggest_skill creates review_pending work items in the work-item pool
+# (when work_items is also enabled) so proposals can be reviewed via
+# POST /v1/work-items/{id}/accept or /reject.
+#
+# Trust levels gate skill creation:
+#   0 -- suggest_skill only (no disk writes)
+#   1+ -- learn_skill (creates versioned SKILL.md in learned_skills/)
+#   3+ -- rollback_skill (restore archived versions)
+#   4+ -- bypass domain restrictions
+#
+# Production env vars:
+#   SELF_HEALING_ENABLED    -- "true" to enable
+#   SELF_HEALING_TRUST_LEVEL -- numeric trust level (0-4)
+#
+# self_healing:
+#   enabled: ${SELF_HEALING_ENABLED:-false}
+#   trust_level: ${SELF_HEALING_TRUST_LEVEL:-0}
+#   trust_domains:
+#     - document_processing
+#   review_policy: human_review     # audit_only | peer_review | human_review
+#   learned_skills_dir: ./learned_skills
+#   max_skills: 50
+
+# -- Subagents (optional, per #165) ------------------------------------------
+#
+# Register other agents the LLM can delegate to via the stock
+# `delegate_to_agent` tool.  When this block is non-empty, BaseAgent
+# auto-registers the tool at startup.  The LLM picks a subagent by name
+# and passes a self-contained task; the framework handles transport,
+# trace propagation, identity forwarding, and depth bounds.
+#
+# Two transport types are supported:
+#
+#   transport.type: remote
+#     HTTP call to another agent's /v1/chat/completions endpoint.
+#     `url` is the OpenAI-compatible endpoint base.  Standard
+#     ${VAR:-default} substitution applies.
+#
+#   transport.type: inprocess
+#     Same-process call to a BaseAgent subclass.  `class_path` is a
+#     dotted import path; `config_path` (optional) points at the
+#     subagent's own agent.yaml.
+#
+# `permission_scope` references a named rule set in PermissionConfig.scopes
+# (#164).  v1 parses this field but does NOT enforce it — enforcement
+# lands once #164 is merged.  A WARNING is logged each time a subagent
+# with permission_scope set is invoked under the v1 scaffold.
+#
+# `identity: inherit` (default) forwards the parent's incoming
+# Authorization header to the subagent.  `identity: service_account: <name>`
+# is reserved for kagenti-issued credentials and is incompatible with
+# inprocess transport (no HTTP boundary at which to override identity).
+#
+# `max_depth` caps delegation chains.  v1 enforces depth on the
+# inprocess path; remote-chain enforcement is a follow-up.
+#
+# Production env vars (example):
+#   RESEARCH_HELPER_URL  -- URL of a research-helper subagent
+#
+# subagents:
+#   - name: research_helper
+#     description: "Searches internal knowledge base; returns synthesised brief."
+#     when_to_use: "Use when the user asks an open-ended policy question."
+#     transport:
+#       type: remote
+#       url: ${RESEARCH_HELPER_URL:-http://research-helper:8080/v1}
+#       timeout_seconds: 60
+#     permission_scope: research-readonly   # parsed; not enforced until #164
+#     identity: inherit
+#     max_depth: 3
+subagents: []
+
 # -- Node deployment topology (optional) -------------------------------------
 #
 # Maps workflow node names to their deployment topology.  Nodes default to
@@ -544,3 +714,66 @@ nodes: {}
 #
 # Production env vars:
 #   SANDBOX_URL -- override the sidecar URL (default: http://localhost:8000)
+
+# -- Pricing (optional) --------------------------------------------------------
+#
+# Token cost lookup table.  Defaults to zero for all models (self-hosted vLLM).
+# Set non-zero rates when billing is metered (hosted providers, usage chargebacks).
+#
+# `default` applies to any model not listed in `models`. `models` keys must
+# match the model identifier exactly as it appears on completion requests
+# (typically `model.name` from this file). All rates are USD per 1,000 tokens.
+#
+# `cached_input_per_1k` is the reduced rate for prompt-cache hits when the
+# provider returns `prompt_tokens_details.cached_tokens` (OpenAI semantics).
+# Omit or set to `null` to charge the full `input_per_1k` rate for cached tokens.
+#
+# Production env vars:
+#   PRICING_INPUT_PER_1K          -- default input rate
+#   PRICING_OUTPUT_PER_1K         -- default output rate
+#   PRICING_CACHED_INPUT_PER_1K   -- default cached input rate
+#   PRICING_PER_REQUEST           -- default per-request fee
+# pricing:
+#   default:
+#     input_per_1k: ${PRICING_INPUT_PER_1K:-0.0}
+#     output_per_1k: ${PRICING_OUTPUT_PER_1K:-0.0}
+#     cached_input_per_1k: ${PRICING_CACHED_INPUT_PER_1K:-}
+#     per_request: ${PRICING_PER_REQUEST:-0.0}
+#   # Example model-specific override:
+#   # models:
+#   #   meta-llama/Llama-3.3-70B-Instruct:
+#   #     input_per_1k: 0.0005
+#   #     output_per_1k: 0.002
+#   #     cached_input_per_1k: 0.0001
+
+# -- Budget (optional) ---------------------------------------------------------
+#
+# Per-session and per-tenant cost limits. Session limits read cumulative cost
+# from the session store; tenant limits aggregate in-process (accurate for
+# single-replica deployments; multi-replica tenant totals require external
+# aggregation).
+#
+# mode:
+#   observe -- log warnings + limit crossings, never raise
+#   enforce -- raise HTTP 402 when hard limit is reached (default)
+#
+# For each limit tier (per_session, per_tenant):
+#   warn_usd  -- log when running total crosses this threshold
+#   limit_usd -- raise BudgetExceededError (when mode: enforce) at this threshold
+#
+# Setting a limit to 0 disables that threshold.
+#
+# Production env vars:
+#   BUDGET_MODE                   -- observe | enforce
+#   BUDGET_SESSION_WARN_USD       -- per-session soft limit
+#   BUDGET_SESSION_LIMIT_USD      -- per-session hard limit
+#   BUDGET_TENANT_WARN_USD        -- per-tenant soft limit
+#   BUDGET_TENANT_LIMIT_USD       -- per-tenant hard limit
+# budget:
+#   mode: ${BUDGET_MODE:-enforce}
+#   per_session:
+#     warn_usd: ${BUDGET_SESSION_WARN_USD:-0.0}
+#     limit_usd: ${BUDGET_SESSION_LIMIT_USD:-0.0}
+#   per_tenant:
+#     warn_usd: ${BUDGET_TENANT_WARN_USD:-0.0}
+#     limit_usd: ${BUDGET_TENANT_LIMIT_USD:-0.0}

@@ -99,9 +99,9 @@ fips-agents --version
 ```
 
 !!! note "CLI version"
-    This tutorial was tested with fips-agents v0.11.0. Newer versions are
+    This tutorial was tested with fips-agents v0.15.1. Newer versions are
     backward-compatible but may produce slightly different scaffold output.
-    To install the exact version: `pipx install 'fips-agents-cli==0.11.0'`
+    To install the exact version: `pipx install 'fips-agents-cli==0.15.1'`
 
 ## Log in to your cluster
 

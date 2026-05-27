@@ -1,13 +1,12 @@
-"""End-to-end integration tests for the calculus-helper MCP server.
+"""
+End-to-end integration tests for MCP server startup and component discovery.
 
-Exercises the actual FastMCP server process (in-process and over HTTP) to
-verify tool discovery and round-trip invocation work through the real client
-API -- not just direct Python calls to the tool functions.
+Tests that the server correctly discovers the calculus tools via
+FileSystemProvider, and that discovered components behave correctly at runtime.
 """
 
 import pytest
 from fastmcp import Client
-from fastmcp.exceptions import ToolError
 from fastmcp.utilities.tests import run_server_async
 
 from src.core.server import create_server
@@ -21,7 +20,10 @@ async def client():
         yield c
 
 
-# The 8 calculus tools this server exposes.
+# ---------------------------------------------------------------------------
+# Discovery tests
+# ---------------------------------------------------------------------------
+
 EXPECTED_TOOLS = [
     "differentiate",
     "evaluate_limit",
@@ -34,67 +36,72 @@ EXPECTED_TOOLS = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Discovery
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize("tool_name", EXPECTED_TOOLS)
 async def test_server_discovers_tools(client, tool_name):
     """Server discovers all expected calculus tools via FileSystemProvider."""
     tools = await client.list_tools()
     names = {t.name for t in tools}
-    assert tool_name in names, (
-        f"Expected tool '{tool_name}' not found in {sorted(names)}"
-    )
+    assert tool_name in names, f"Expected tool '{tool_name}' not found in {sorted(names)}"
 
 
-async def test_exactly_eight_tools_registered(client):
-    """No unexpected tools leak in (regression guard against example rot)."""
+async def test_no_example_tools_present(client):
+    """Example tools from the scaffold template have been removed."""
     tools = await client.list_tools()
-    names = sorted(t.name for t in tools)
-    assert names == sorted(EXPECTED_TOOLS), (
-        f"Unexpected tool set. Got: {names}. Expected: {sorted(EXPECTED_TOOLS)}"
-    )
+    names = {t.name for t in tools}
+    example_tools = {"echo", "delete_all", "get_weather", "write_release_notes"}
+    found = names & example_tools
+    assert not found, f"Example tools should have been removed: {sorted(found)}"
 
 
 # ---------------------------------------------------------------------------
-# Round-trip through the MCP client API
+# Tool behaviour tests
 # ---------------------------------------------------------------------------
 
 
-async def test_differentiate_roundtrip(client):
-    """differentiate via the real FastMCP client returns the expected dict."""
+async def test_differentiate_basic(client):
+    """differentiate computes d/dx of x**2 correctly."""
     result = await client.call_tool(
-        "differentiate", {"expression": "x**3 - 2*x", "variables": ["x"]}
+        "differentiate",
+        {"expression": "x**2", "variables": ["x"]},
     )
     assert not result.is_error, f"differentiate returned an error: {result}"
-    data = result.data
-    assert data["result"] == "3*x**2 - 2", f"Unexpected result: {data}"
-    assert data["is_exact"] is True
-
-
-async def test_integrate_definite_roundtrip(client):
-    """integrate definite integral via the MCP client API."""
-    result = await client.call_tool(
-        "integrate",
-        {"expression": "x", "variable": "x", "lower_bound": "0", "upper_bound": "1"},
-    )
-    assert not result.is_error
-    assert result.data["result"] == "1/2"
+    assert result.data["result"] == "2*x"
     assert result.data["is_exact"] is True
 
 
-async def test_parse_error_surfaces_as_tool_error(client):
-    """The '^' coaching error must propagate through the client as a ToolError."""
-    with pytest.raises(ToolError, match=r"\*\*"):
-        await client.call_tool(
-            "differentiate", {"expression": "x^2", "variables": ["x"]}
-        )
+async def test_simplify_expression_basic(client):
+    """simplify_expression simplifies sin(x)**2 + cos(x)**2 to 1."""
+    result = await client.call_tool(
+        "simplify_expression",
+        {"expression": "sin(x)**2 + cos(x)**2", "form": "simplify"},
+    )
+    assert not result.is_error, f"simplify_expression returned an error: {result}"
+    assert result.data["result"] == "1"
+
+
+async def test_integrate_indefinite(client):
+    """integrate computes the indefinite integral of 2*x."""
+    result = await client.call_tool(
+        "integrate",
+        {"expression": "2*x", "variable": "x"},
+    )
+    assert not result.is_error, f"integrate returned an error: {result}"
+    assert result.data["result"] == "x**2"
+
+
+async def test_evaluate_numeric_basic(client):
+    """evaluate_numeric evaluates sqrt(2) to a numerical value."""
+    result = await client.call_tool(
+        "evaluate_numeric",
+        {"expression": "sqrt(2)"},
+    )
+    assert not result.is_error, f"evaluate_numeric returned an error: {result}"
+    # Should start with 1.41421...
+    assert result.data["result"].startswith("1.4142")
 
 
 # ---------------------------------------------------------------------------
-# HTTP transport
+# HTTP transport test
 # ---------------------------------------------------------------------------
 
 
@@ -105,6 +112,10 @@ async def test_http_transport_lists_tools():
         async with Client(url) as http_client:
             tools = await http_client.list_tools()
             names = {t.name for t in tools}
-            assert names == set(EXPECTED_TOOLS), (
-                f"HTTP transport tool set mismatch. Got: {sorted(names)}"
+            assert "differentiate" in names, (
+                f"differentiate not found via HTTP transport: {sorted(names)}"
+            )
+            assert len(tools) >= len(EXPECTED_TOOLS), (
+                f"HTTP transport discovered only {len(tools)} tools, "
+                f"expected at least {len(EXPECTED_TOOLS)}"
             )

@@ -1,10 +1,10 @@
 # AI Coding Assistant Guidelines
 
-This file provides guidance for AI coding assistants (Claude, Cursor, GitHub Copilot, etc.) working with this calculus-helper MCP server.
+This file provides guidance for AI coding assistants (Claude, Cursor, GitHub Copilot, etc.) working with this MCP server template.
 
 ## MCP Development Workflow
 
-This project was built using a structured workflow (originally from [rdwj/mcp-server-template](https://github.com/rdwj/mcp-server-template)) for developing MCP tools. If using Claude Code, use the slash commands in `.claude/commands/`. For other assistants, follow this sequence manually:
+This template provides a structured workflow for developing MCP tools. If using Claude Code, use the slash commands. For other assistants, follow this sequence manually:
 
 ### Recommended Sequence
 
@@ -116,9 +116,9 @@ fastmcp>=2.11.3
 httpx>=0.27.0  # <-- Same dependency
 ```
 
-### Project Structure
+### Template Structure
 
-This project uses a **multi-module structure** under `src/`:
+This template uses a **multi-module structure** under `src/`:
 
 ```
 src/

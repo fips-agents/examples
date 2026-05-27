@@ -367,9 +367,9 @@ mcp_servers:
 ```
 
 !!! warning "Verify the `headers` field"
-    The `headers` field in `mcp_servers` is supported in fipsagents
-    v0.11.0+. If your scaffolded agent uses an older version, check
-    `agent.yaml` reference docs for the correct syntax.
+    The `headers` field in `mcp_servers` is supported in the tutorial
+    baseline (fipsagents v0.31.0). Check the `agent.yaml` reference docs
+    for the full syntax.
 
 Restart the agent to pick up the new environment:
 

@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Tutor-role coordinator that delegates calculus problems to a specialist agent via subagent-as-tool"
 requires-python = ">=3.11"
 dependencies = [
-    "fipsagents[server,metrics]>=0.22.0",
+    "fipsagents[server,metrics]>=0.31.0",
 ]
 
 [project.optional-dependencies]

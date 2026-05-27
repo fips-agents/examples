@@ -4,7 +4,7 @@ A hands-on tutorial that takes you from zero to a deployed AI agent system
 on **Red Hat AI**, using the [fips-agents](https://github.com/fips-agents)
 toolkit.
 
-This tutorial was last verified against **fipsagents v0.11.0** (April 2026). The current release is **v0.26.0** (May 2026) — see [What's New Since v0.11](#whats-new-since-v011) for features available in newer versions.
+This tutorial was last verified against **fipsagents v0.31.0** (May 2026). See [Feature Highlights](#feature-highlights) for the full capability set.
 
 ## What is Red Hat AI?
 
@@ -93,9 +93,9 @@ you get stuck:
 - `calculus-agent/` -- the finished agent
 - `calculus-helper/` -- the finished MCP server
 
-## What's new since v0.11
+## Feature highlights
 
-The tutorial's module sequence is stable at v0.11.0. Newer fipsagents releases add capabilities that slot into the same architecture without changing Modules 1–9. To use these, bump the version in your agent's `pyproject.toml` and consult `docs/architecture.md` in the [agent-template](https://github.com/fips-agents/agent-template) repo.
+The tutorial's module sequence is stable at v0.31.0. All features below are included in the baseline. For details on any capability, consult `docs/architecture.md` in the [agent-template](https://github.com/fips-agents/agent-template) repo.
 
 | Version | Feature | What it adds |
 |---------|---------|-------------|
@@ -111,5 +111,13 @@ The tutorial's module sequence is stable at v0.11.0. Newer fipsagents releases a
 | 0.24.0 | OTEL trace fidelity | Configurable detail levels for trace replay |
 | 0.25.0 | Kafka/Redis sources | Event-triggered agents can consume Kafka topics and Redis Streams |
 | 0.26.0 | State recovery | Reducer-based checkpoint/replay for long-running agents |
+| 0.27.0 | Graph store | Apache AGE property-graph backend for entity/relationship persistence |
+| 0.28.0 | Per-turn cost ceiling | `max_cost_per_turn_usd` enforcement in the agent loop |
+| 0.29.0 | Work-item coordination | `WorkItemStore` with lease-based checkout, 5 stock LLM tools, session continuity |
+| 0.30.0 | Prompt assembly | Layered system prompt composition (identity, personality, governance, capabilities) |
+| 0.30.0 | Trust and maturation | Trust accumulation, lifecycle stages (Proto-Agent → Specialist), graduated autonomy |
+| 0.30.0 | Self-healing tools | `learn_skill`, `suggest_skill`, `rollback_skill` with trust-gated access |
+| 0.31.0 | Ad-hoc spawn_agent | Stock tool for ephemeral in-process agent instances with tool-subset whitelisting |
+| 0.31.0 | AGENTS.md scaffold | AAIF-spec agent identity file, served via `/v1/agent-info` |
 
 The `calculus-coordinator/` directory in this repo demonstrates subagent-as-tool (v0.22.0).
