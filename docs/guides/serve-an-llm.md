@@ -131,6 +131,8 @@ spec:
           value: /tmp/home
         - name: HF_HOME
           value: /models/huggingface
+        - name: HF_HUB_OFFLINE
+          value: "0"
         - name: TRANSFORMERS_CACHE
           value: /models/huggingface
         - name: VLLM_CACHE_DIR
