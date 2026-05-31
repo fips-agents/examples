@@ -128,7 +128,7 @@ metadata:
   namespace: openshift-operators
 spec:
   channel: stable
-  name: connectivity-link-operator
+  name: rhcl-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
 EOF
@@ -182,11 +182,7 @@ cluster standards require, then create the connection secret in the
 ```bash
 oc create secret generic maas-db-config \
   -n redhat-ods-applications \
-  --from-literal=host=<postgres-host> \
-  --from-literal=port=5432 \
-  --from-literal=dbname=maas \
-  --from-literal=user=maas \
-  --from-literal=password=<password>
+  --from-literal=DB_CONNECTION_URL="postgresql://<user>:<password>@<postgres-host>:5432/<dbname>"
 ```
 
 !!! tip "Database timing"
@@ -317,7 +313,7 @@ oc patch authorino authorino -n kuadrant-system --type merge -p '{
 **7c.** Add CA bundle environment variables to the Authorino deployment:
 
 ```bash
-oc set env deployment/authorino-authorino-authorization \
+oc set env deployment/authorino \
   SSL_CERT_FILE=/etc/ssl/certs/openshift-service-ca/service-ca-bundle.crt \
   REQUESTS_CA_BUNDLE=/etc/ssl/certs/openshift-service-ca/service-ca-bundle.crt \
   -n kuadrant-system
