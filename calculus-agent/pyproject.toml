@@ -17,7 +17,7 @@ feedback = [
 ]
 files = [
     # Pulls in docling (text extraction) + python-magic (content-based
-    # MIME sniffing). Adds ~500MB to the container image because of
+    # MIME sniffing). Adds ~5 GB to the container image because of
     # docling's torch/transformers — leave opt-in unless the agent
     # actively ingests files.
     "fipsagents[files]",

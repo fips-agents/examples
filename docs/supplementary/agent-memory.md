@@ -52,11 +52,13 @@ Verify the MCP endpoint is reachable:
 ```bash
 curl -sf https://memory-hub-mcp-memory-hub-mcp.apps.<cluster>/mcp/ \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' | python -m json.tool
 ```
 
 Replace `<cluster>` with your cluster's apps domain. A successful response
-lists MemoryHub's MCP tools (`memory_search`, `memory_write`, `memory_list`,
+lists MemoryHub's MCP tools: `register_session` and `memory` (a unified tool
+whose `action` parameter selects the operation -- `search`, `write`, `list`,
 etc.).
 
 !!! tip "Local development without a cluster deployment"
@@ -115,6 +117,7 @@ results = await self.memory.search("calculus preferences", max_results=5)
 
 await self.memory.write(
     content="User prefers step-by-step solutions",
+    content_type="behavioral",
     scope="user",
     weight=0.8,
 )
@@ -130,6 +133,11 @@ model:
 | `role` | All agents with a given role | "Calculus tutors show worked steps" |
 | `organizational` | All agents in an org | "Company style guide rules" |
 | `enterprise` | All agents everywhere | "Compliance: no PII in responses" |
+
+The `content_type` parameter classifies what the memory represents:
+`experiential` (events and interactions), `knowledge` (facts and information),
+or `behavioral` (preferences and patterns). MemoryHub uses this for curation
+and retrieval ranking.
 
 The `weight` parameter (0.0--1.0) signals how important the memory is.
 Higher-weight memories rank higher in search results and are less likely to be
@@ -174,47 +182,50 @@ the memory was persisted:
 ```bash
 curl -s https://memory-hub-mcp-memory-hub-mcp.apps.<cluster>/mcp/ \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",
-    "params": {"name": "memory_search", "arguments": {"query": "preferences", "max_results": 5}},
+    "params": {"name": "memory", "arguments": {"action": "search", "query": "preferences", "max_results": 5}},
     "id": 1
   }' | python -m json.tool
 ```
 
-### Curation rejection
+### Curation and duplicate detection
 
 MemoryHub doesn't accept every write blindly. A curation layer checks each
 incoming memory against existing content and configured rules before
-persisting it. If the write is too similar to an existing memory, or violates
-a curation rule, MemoryHub blocks it and returns a structured rejection.
+persisting it. If the write is too similar to an existing memory, MemoryHub
+flags it with a similarity warning and a recommendation.
 
 Try it: write the same fact twice. The first write succeeds. The second
-triggers a near-duplicate rejection:
+gets flagged as a possible duplicate:
 
 ```python
 # First write -- succeeds
 await self.memory.write(
     content="User prefers step-by-step solutions",
+    content_type="behavioral",
     scope="user",
     weight=0.8,
 )
 
-# Second write -- blocked by curation
+# Second write -- flagged as possible duplicate
 result = await self.memory.write(
     content="The user prefers step-by-step solutions",
+    content_type="behavioral",
     scope="user",
     weight=0.8,
 )
 ```
 
-The rejection response includes the reason, the similar memory's ID and
-similarity score, and a recommendation:
+The response includes a similarity flag, the near-duplicate's ID and score,
+and a recommendation:
 
 ```json
 {
-  "blocked": true,
-  "reason": "exact_duplicate",
+  "blocked": false,
+  "reason": "possible_duplicate",
   "detail": "Memory is 99% similar to existing memory b7ba6e8e-...",
   "nearest_score": 0.9869,
   "existing_memory_id": "b7ba6e8e-...",
@@ -222,10 +233,14 @@ similarity score, and a recommendation:
 }
 ```
 
-The `recommendation` field tells the agent what to do instead -- in this case,
-update the existing memory rather than creating a duplicate. The fips-agents
-`MemoryClient` surfaces this as a structured return value; in kagenti ADK (Part
-2), the equivalent is a `MemoryRejectionError` exception.
+Note that `"blocked"` is `false` -- by default, MemoryHub flags near-duplicates
+rather than rejecting them outright. The write still succeeds, but the
+`recommendation` field tells the agent it should update the existing memory
+instead of creating duplicates. Whether near-duplicates are hard-blocked
+depends on the MemoryHub instance's similarity threshold configuration.
+
+The fips-agents `MemoryClient` surfaces this as a structured return value; in
+kagenti ADK (Part 2), the equivalent is a `MemoryRejectionError` exception.
 
 This is the curation system working as designed. Without it, agents that
 write aggressively (common with LLM-driven memory) would fill the store with
@@ -383,7 +398,7 @@ model. The differences are in wiring and credential flow:
 | Credential management | Agent-side (env vars or Secret) | Client-side (fulfillment metadata) |
 | Backend | MemoryHub MCP | MemoryHub MCP |
 | Scoping model | Same 5-tier scoping | Same 5-tier scoping |
-| Curation rejection | Handled by `MemoryClient` | `MemoryRejectionError` exception |
+| Curation flagging | Handled by `MemoryClient` | `MemoryRejectionError` exception |
 
 The fips-agents path is simpler to set up and fits naturally into the
 `agent.yaml` configuration model you've been using throughout the tutorial. The

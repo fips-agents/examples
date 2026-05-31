@@ -235,6 +235,24 @@ oc rollout restart deployment/calculus-agent -n calculus-agent --context="$CTX"
 oc rollout status deployment/calculus-agent -n calculus-agent --context="$CTX"
 ```
 
+### Set the agent route timeout
+
+In Module 5, you set 120-second timeouts on the gateway and UI routes. The
+agent route also needs this -- sandbox code execution adds a tool-call round
+trip on top of the LLM call, and multi-step queries (symbolic result followed
+by numerical evaluation) can easily exceed the default 30-second timeout:
+
+```bash
+oc annotate route calculus-agent \
+  haproxy.router.openshift.io/timeout=120s \
+  --overwrite -n calculus-agent --context="$CTX"
+```
+
+This matters less when traffic flows through the gateway (the gateway's own
+timeout governs that path), but any direct `curl` to the agent route -- like
+the verification commands below -- will hit the 30-second default without this
+annotation.
+
 Verify the agent discovered the new local tool alongside the MCP tools:
 
 ```bash

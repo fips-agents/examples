@@ -384,7 +384,18 @@ files = ["fipsagents[files]"]
 dev = [
 ```
 
-Then install:
+Update the `Containerfile` so the container image installs the files extra.
+Find the `pip install` line in the builder stage and change it:
+
+```diff
+- && pip install --no-cache-dir .
++ && pip install --no-cache-dir '.[files]'
+```
+
+Without this change, `make build` produces an image without Docling or
+python-magic, and `/v1/files` will fail at runtime with an import error.
+
+Then install locally:
 
 ```bash
 cd calculus-agent
@@ -447,14 +458,25 @@ Once the agent is happy locally, redeploy:
 
 ```bash
 make deploy PROJECT=calculus-agent
-helm upgrade calculus-gateway ../calculus-gateway/chart \
+helm upgrade calculus-gateway calculus-gateway \
   --kube-context="$CTX" -n calculus-agent \
+  --reuse-values \
   --set files.maxBytes=25m \
   --set files.allowedMime="application/pdf,image/*"
-helm upgrade calculus-ui ../calculus-ui/chart \
+helm upgrade calculus-ui calculus-ui \
   --kube-context="$CTX" -n calculus-agent \
+  --reuse-values \
   --set files.maxBytes=25m
 ```
+
+!!! note "Reusing the deployed chart"
+    The gateway and UI were scaffolded in `/tmp` during
+    [Module 5](05-gateway-and-ui.md) and deployed via `helm install`.
+    Here we use `--reuse-values` to keep the existing chart and only
+    override the file-upload settings. If Helm cannot find the release,
+    `cd` to the directory where you originally scaffolded
+    `calculus-gateway` and `calculus-ui` and pass the local chart path
+    instead (e.g., `helm upgrade calculus-gateway ./chart ...`).
 
 Open the UI, drag a PDF onto the chat input, watch the progress chip,
 then ask a question.
