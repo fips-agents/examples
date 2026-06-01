@@ -357,4 +357,4 @@ dashboard.
 
 ## Next
 
-[Install OpenShift AI](install-openshift-ai.md).
+[Serve an LLM](serve-an-llm.md).
