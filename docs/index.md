@@ -13,6 +13,13 @@ cloud. In this tutorial, "Red Hat AI" specifically means **OpenShift AI
 running on OpenShift**: OpenShift is the underlying Kubernetes platform,
 OpenShift AI is the MLOps layer that manages model serving (via KServe and
 vLLM), and your agents run as ordinary OpenShift workloads alongside.
+Later modules introduce **OGX** (the LlamaStack distribution bundled with
+OpenShift AI), which moves tool orchestration, safety shields, and
+observability into the platform — the agent delegates these concerns to
+OpenShift AI rather than handling them itself. The supplementary
+**Models as a Service** module adds governed model access with API keys,
+token quotas, and usage tracking, all managed through OpenShift AI's
+dashboard.
 
 ## What you'll build
 
