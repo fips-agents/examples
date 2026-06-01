@@ -36,21 +36,14 @@ ROSA, Developer Sandbox, and local CRC tradeoffs.
 
     [fips]: https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/installation_overview/installing-fips
 
-### 2. Red Hat OpenShift AI
+### 2. Red Hat OpenShift AI and GPU support (Path A only)
 
 The **Red Hat OpenShift AI** operator (3.2 or later) must be installed via
 the `fast-3.x` channel, and a `DataScienceCluster` provisioned with KServe
-enabled for model serving. RHOAI 3.x requires OpenShift 4.20+.
+enabled for model serving. On-cluster model serving also requires at least
+one GPU-enabled worker node. RHOAI 3.x requires OpenShift 4.20+.
 
-→ See [Install OpenShift AI](guides/install-openshift-ai.md).
-
-### 3. A GPU node (Path A only)
-
-On-cluster model serving requires at least one GPU-enabled worker node. If
-your cluster doesn't have one yet, provision it before installing OpenShift
-AI or deploying the model.
-
-→ See [GPU Node Setup](guides/gpu-node-setup.md).
+→ See [Install OpenShift AI and GPU Support](guides/install-openshift-ai.md).
 
 ### 4. An LLM (RedHatAI/gpt-oss-20b)
 

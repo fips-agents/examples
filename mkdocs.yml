@@ -56,7 +56,6 @@ nav:
   - Setup Guides:
     - "Choosing a Cluster": guides/cluster-options.md
     - "Install OpenShift AI": guides/install-openshift-ai.md
-    - "GPU Node Setup": guides/gpu-node-setup.md
     - "Serve an LLM": guides/serve-an-llm.md
     - "Install CLI Tools": guides/install-cli-tools.md
     - "Registry Setup": guides/registry-setup.md
