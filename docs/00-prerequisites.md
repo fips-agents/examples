@@ -44,7 +44,15 @@ enabled for model serving. RHOAI 3.x requires OpenShift 4.20+.
 
 → See [Install OpenShift AI](guides/install-openshift-ai.md).
 
-### 3. An LLM (RedHatAI/gpt-oss-20b)
+### 3. A GPU node (Path A only)
+
+On-cluster model serving requires at least one GPU-enabled worker node. If
+your cluster doesn't have one yet, provision it before installing OpenShift
+AI or deploying the model.
+
+→ See [GPU Node Setup](guides/gpu-node-setup.md).
+
+### 4. An LLM (RedHatAI/gpt-oss-20b)
 
 The tutorial uses **`RedHatAI/gpt-oss-20b`** served via vLLM. You need:
 
@@ -57,7 +65,7 @@ The tutorial uses **`RedHatAI/gpt-oss-20b`** served via vLLM. You need:
 → See [Serve an LLM](guides/serve-an-llm.md). The Path B fallback is in the
 same guide.
 
-### 4. CLI tools
+### 5. CLI tools
 
 - `oc` (OpenShift client)
 - `helm` 3.x
@@ -67,7 +75,7 @@ same guide.
 
 → See [Install CLI Tools](guides/install-cli-tools.md).
 
-### 5. A container registry you can push to
+### 6. A container registry you can push to
 
 Modules 2, 3, and 6 build and push container images. Quay.io (free public
 namespaces) works for the tutorial; the OpenShift internal registry works

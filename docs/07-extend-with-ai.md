@@ -147,13 +147,15 @@ scenarios. You can re-run them later with `make eval` from the agent project
 With all eight tools passing tests and exercised for ergonomics, deploy:
 
 ```bash
-./deploy.sh calculus-mcp
+fips-agents deploy --context="$CTX" -n calculus-mcp
 ```
 
-Or using the Makefile:
+You can also use the Makefile wrapper or the standalone deploy script:
 
 ```bash
 make deploy PROJECT=calculus-mcp
+# or
+./deploy.sh calculus-mcp
 ```
 
 The deployment rebuilds the container image and rolls out the new pod. The
@@ -182,10 +184,17 @@ curl -sk "https://$ROUTE/v1/agent-info" | python -m json.tool
     "tools": [
         "integrate", "differentiate", "evaluate_limit",
         "taylor_series", "solve_equation", "solve_ode",
-        "simplify_expression", "evaluate_numeric", "code_executor"
+        "simplify_expression", "evaluate_numeric", "code_executor",
+        "ask_user", "spawn_agent"
     ]
 }
 ```
+
+!!! note "Stock tools in the tool list"
+    `ask_user` and `spawn_agent` are stock tools provided by the BaseAgent
+    framework. They appear in the agent-info response alongside your
+    calculus tools and the code executor. The exact set of stock tools may
+    vary with framework version.
 
 ## Update the system prompt
 

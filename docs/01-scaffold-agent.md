@@ -28,9 +28,9 @@ cd calculus-agent && ls
 ```
 .claude/        AGENTS.md       CLAUDE.md       Containerfile
 Makefile        README.md       agent.yaml      chart/
-deploy.sh       evals/          prompts/        pyproject.toml
-redeploy.sh     rules/          skills/         src/
-tests/          tools/
+deploy.sh       evals/          identity.md     personality.md
+prompts/        pyproject.toml  redeploy.sh     rules/
+skills/         src/            tests/          tools/
 ```
 
 ## Project structure
@@ -44,6 +44,8 @@ tests/          tools/
 | `skills/` | Progressive-disclosure capabilities (agentskills.io spec) |
 | `rules/` | Behavioral constraints, one Markdown file per rule |
 | `chart/` | Helm chart for deploying to OpenShift |
+| `identity.md` | Agent identity definition (name, role, personality traits) |
+| `personality.md` | Agent personality and communication style |
 | `evals/` | Test scenarios and eval runner |
 | `Containerfile` | Multi-stage build using Red Hat UBI base images |
 | `Makefile` | Development and deployment commands |
@@ -71,14 +73,17 @@ We'll change these to match our calculus agent in Module 2.
 
 ```yaml
 model:
+  provider: ${MODEL_PROVIDER:-openai}
   endpoint: ${MODEL_ENDPOINT:-http://llamastack:8321/v1}
   name: ${MODEL_NAME:-meta-llama/Llama-3.3-70B-Instruct}
   temperature: 0.7
   max_tokens: 4096
 ```
 
-This points at any OpenAI-compatible API -- vLLM, LlamaStack, llm-d, or even
-OpenAI itself.
+The `provider` field selects the LLM backend. The default (`openai`) works with
+any OpenAI-compatible API -- vLLM, LlamaStack, llm-d, or even OpenAI itself.
+Set it to `anthropic`, `bedrock`, or `azure` to route through an adapter
+sidecar instead.
 
 !!! tip "Environment variable substitution"
     `${MODEL_ENDPOINT:-http://llamastack:8321/v1}` means: use the
@@ -135,6 +140,32 @@ controls which tool plane a tool belongs to if it doesn't declare one
 explicitly (more on planes below). The server section configures the HTTP
 binding -- the agent exposes an OpenAI-compatible `/v1/chat/completions`
 endpoint that the gateway and UI communicate through.
+
+### Prompt assembly (layered mode)
+
+The scaffold includes a `prompt_assembly` section that replaces the flat
+system-prompt concatenation with named layers:
+
+```yaml
+prompt_assembly:
+  identity:
+    source: identity.md
+    enabled: true
+  personality:
+    source: personality.md
+    enabled: false
+  governance_enabled: true
+  capabilities_enabled: true
+```
+
+This is what `identity.md` and `personality.md` in the project root are for.
+When `prompt_assembly` is present, `build_system_prompt()` assembles the system
+message from four layers in precedence order: identity (who the agent IS),
+personality (how it behaves), governance (rules/), and capabilities (skills/).
+Identity is on by default; personality is off until you enable it.
+
+When `prompt_assembly` is absent, the legacy flat concatenation (system prompt
++ rules + skills) is used instead. We'll customize `identity.md` in Module 2.
 
 ## Understanding src/agent.py
 
@@ -323,16 +354,27 @@ curl localhost:8080/v1/agent-info | python -m json.tool
         "max_tokens": 4096
     },
     "system_prompt": "You are a helpful assistant.\n\n## Instructions\n...",
-    "tools": []
+    "tools": [
+        {
+            "name": "ask_user",
+            "description": "Ask the user a clarifying question"
+        },
+        {
+            "name": "spawn_agent",
+            "description": "Spawn a sub-agent to handle a delegated task"
+        }
+    ]
 }
 ```
 
 The `model.name` value reflects whatever you configured in `agent.yaml`; the
 scaffold default is shown here.
 
-The `tools` array is a list of objects (`{name, description, parameters}`)
-when tools are registered, and `system_prompt` reflects the rendered prompt
-text after rule and skill injection.
+The `tools` array lists every tool registered with `llm_only` or `both`
+visibility. The two shown above are **stock tools** that BaseAgent always
+registers -- `ask_user` for interactive clarification and `spawn_agent` for
+multi-agent delegation. `system_prompt` reflects the rendered prompt text
+after rule and skill injection.
 
 !!! note "MemoryHub log line"
     On first start you'll see `MemoryHub config at .memoryhub.yaml has no

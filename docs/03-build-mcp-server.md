@@ -23,7 +23,6 @@ The generated project follows a convention-over-configuration pattern:
 | `src/prompts/` | Prompt implementations (empty for this project) |
 | `Containerfile` | Red Hat UBI build for OpenShift |
 | `openshift.yaml` | BuildConfig, Deployment, Service, Route |
-| `deploy.sh` | One-command deploy script |
 
 ### How auto-discovery works
 
@@ -327,16 +326,25 @@ async def test_caret_raises():
 
 ## Deploy to OpenShift
 
-The project includes `openshift.yaml` (BuildConfig, Deployment, Service, Route)
-and a `deploy.sh` script that applies them, uploads source, builds the
-container, and waits for rollout:
+The project includes `openshift.yaml` (BuildConfig, Deployment, Service,
+Route). Deploy with a single command:
+
+```bash
+fips-agents deploy --context="$CTX" -n calculus-mcp
+```
+
+This applies `openshift.yaml`, uploads your source, builds the container in
+the cluster, and waits for the rollout to complete.
+
+Alternatively, use the bundled shell script:
 
 ```bash
 ./deploy.sh calculus-mcp
 ```
 
-The Containerfile uses `registry.redhat.io/ubi9/python-311:latest` and sets the
-HTTP transport environment for port 8080.
+Both commands do the same thing. The Containerfile uses
+`registry.redhat.io/ubi9/python-311:latest` and sets the HTTP transport
+environment for port 8080.
 
 !!! warning "File permissions"
     The Containerfile includes `RUN find ./src -name "*.py" -exec chmod 644 {} \;`

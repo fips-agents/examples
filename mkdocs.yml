@@ -55,6 +55,7 @@ nav:
     - "MCP Gateway": supplementary/mcp-gateway.md
   - Setup Guides:
     - "Choosing a Cluster": guides/cluster-options.md
+    - "GPU Node Setup": guides/gpu-node-setup.md
     - "Install OpenShift AI": guides/install-openshift-ai.md
     - "Serve an LLM": guides/serve-an-llm.md
     - "Install CLI Tools": guides/install-cli-tools.md

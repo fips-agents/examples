@@ -49,9 +49,13 @@ From the OpenShift web console:
     export CTX=$(oc config current-context)
     ```
 
-Or from the CLI:
+Or from the CLI — create the namespace first, then apply the OperatorGroup
+and Subscription:
 
 ```bash
+oc create namespace redhat-ods-operator --context="$CTX" \
+  --dry-run=client -o yaml | oc apply --context="$CTX" -f -
+
 oc apply --context="$CTX" -n redhat-ods-operator -f - <<EOF
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup

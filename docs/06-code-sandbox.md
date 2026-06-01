@@ -104,11 +104,16 @@ When `sandbox.enabled` is `true`, the Helm chart does two things:
 The sidecar shares the pod's network namespace, so the agent reaches it at
 `localhost:8000` with no Service or Route required.
 
-Deploy the updated chart:
+Deploy the updated chart, pointing at the ImageStream the build created:
 
 ```bash
+# Resolve the sandbox image path from the ImageStream
+SANDBOX_IMAGE=$(oc get is code-sandbox --context="$CTX" -n calculus-agent \
+  -o jsonpath='{.status.dockerImageRepository}')
+
 helm upgrade calculus-agent chart/ \
   --set sandbox.enabled=true \
+  --set sandbox.image.repository=$SANDBOX_IMAGE \
   --reuse-values \
   -n calculus-agent --kube-context="$CTX"
 ```
@@ -234,6 +239,24 @@ oc start-build calculus-agent --from-dir=. --follow -n calculus-agent --context=
 oc rollout restart deployment/calculus-agent -n calculus-agent --context="$CTX"
 oc rollout status deployment/calculus-agent -n calculus-agent --context="$CTX"
 ```
+
+### Set the agent route timeout
+
+In Module 5, you set 120-second timeouts on the gateway and UI routes. The
+agent route also needs this -- sandbox code execution adds a tool-call round
+trip on top of the LLM call, and multi-step queries (symbolic result followed
+by numerical evaluation) can easily exceed the default 30-second timeout:
+
+```bash
+oc annotate route calculus-agent \
+  haproxy.router.openshift.io/timeout=120s \
+  --overwrite -n calculus-agent --context="$CTX"
+```
+
+This matters less when traffic flows through the gateway (the gateway's own
+timeout governs that path), but any direct `curl` to the agent route -- like
+the verification commands below -- will hit the 30-second default without this
+annotation.
 
 Verify the agent discovered the new local tool alongside the MCP tools:
 

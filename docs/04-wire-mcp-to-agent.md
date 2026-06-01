@@ -164,7 +164,7 @@ results, and re-calls the model until no more tool calls remain.
 
 ## Rebuild and redeploy
 
-With the three files updated, rebuild the container and push a new deployment:
+With the three files updated, rebuild and redeploy:
 
 ```bash
 # Rebuild the image in the cluster
@@ -175,12 +175,6 @@ oc rollout restart deployment/calculus-agent --context="$CTX" -n calculus-agent
 
 # Wait for the new pod to become ready
 oc rollout status deployment/calculus-agent --context="$CTX" -n calculus-agent
-```
-
-Or use the Makefile shortcut:
-
-```bash
-make redeploy PROJECT=calculus-agent
 ```
 
 !!! warning "MCP server must be running"

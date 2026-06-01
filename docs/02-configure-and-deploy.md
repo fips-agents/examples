@@ -97,15 +97,7 @@ reachable inside the cluster via its Service.
 256Mi memory) are reasonable because the agent is I/O-bound: it spends most
 of its time waiting for LLM responses over the network.
 
-## Build the container image
-
-You need a container image before you can deploy. There are two approaches.
-
-### Option A: OpenShift BuildConfig (recommended)
-
-A BuildConfig builds your image directly in the cluster's internal registry.
-No need to push images to an external registry, and the build runs on x86_64
-regardless of your laptop's architecture.
+## Deploy to OpenShift
 
 First, create the namespace where the agent will be deployed:
 
@@ -116,34 +108,73 @@ oc new-project calculus-agent --context="$CTX"
 This creates the `calculus-agent` namespace and sets up the necessary
 service accounts for builds and deployments.
 
-```bash
-# Create a binary BuildConfig that accepts source uploads
-oc new-build --binary --name=calculus-agent --strategy=docker -n calculus-agent --context="$CTX"
+Deploying the agent requires three operations: build the container image
+in the cluster, resolve the image registry path, and install the Helm
+chart. MCP servers (Module 3) can use `fips-agents deploy` for all of
+this in one command, but agent projects currently require the manual
+steps below.
 
-# Tell it to use Containerfile instead of Dockerfile
+### Build the container image
+
+Create a binary BuildConfig that accepts source uploads, then start
+the build:
+
+```bash
+# Create the BuildConfig
+oc new-build --binary --name=calculus-agent --strategy=docker \
+  -n calculus-agent --context="$CTX"
+
+# Point it at the Containerfile
 oc patch bc/calculus-agent --type=json \
   -p '[{"op":"replace","path":"/spec/strategy/dockerStrategy/dockerfilePath","value":"Containerfile"}]' \
   -n calculus-agent --context="$CTX"
 
-# Upload your source and start the build
-oc start-build calculus-agent --from-dir=. --follow -n calculus-agent --context="$CTX"
+# Upload source and build
+oc start-build calculus-agent --from-dir=. --follow \
+  -n calculus-agent --context="$CTX"
 ```
 
-!!! info "What is a BuildConfig?"
-    A BuildConfig is an OpenShift resource that tells the platform how to build
-    a container image. With `--binary`, it accepts source code uploaded from
-    your local machine and builds the image server-side. The resulting image is
-    pushed to the cluster's internal registry automatically -- no external
-    registry credentials needed.
+The build runs server-side on x86_64 — no architecture mismatches
+regardless of your laptop.
 
-The `--follow` flag streams build logs to your terminal. When the build
-completes you will see a line like `Push successful` followed by the internal
-image reference.
+### Deploy with Helm
 
-### Option B: Local build + push
+Resolve the ImageStream to get the internal registry path, then install
+the chart:
 
-If you prefer to build locally (or need to push to an external registry like
-Quay), use the Makefile target:
+```bash
+IMAGE=$(oc get is calculus-agent -n calculus-agent --context="$CTX" \
+  -o jsonpath='{.status.dockerImageRepository}')
+
+helm install calculus-agent chart/ \
+  --set image.repository=$IMAGE \
+  --set image.tag=latest \
+  --set image.pullPolicy=Always \
+  --set config.MODEL_ENDPOINT=$MODEL_ENDPOINT \
+  --set config.MODEL_NAME=$MODEL_NAME \
+  --set config.OPENAI_API_KEY=not-required \
+  --set route.enabled=true \
+  -n calculus-agent --kube-context="$CTX"
+```
+
+Replace `$MODEL_ENDPOINT` and `$MODEL_NAME` with the values from the
+"Set your model endpoint" section above.
+
+The `--set config.*` flags inject environment variables into the
+ConfigMap that gets mounted in the pod. These override the
+`${VAR:-default}` placeholders in `agent.yaml` at runtime:
+
+- **`config.MODEL_ENDPOINT`** — the `/v1` URL of your vLLM or
+  LlamaStack inference endpoint.
+- **`config.MODEL_NAME`** — the model identifier your endpoint expects.
+- **`config.OPENAI_API_KEY`** — satisfies the SDK requirement. Set to a
+  real key only if your endpoint requires authentication.
+
+The result is a Deployment, Service, ConfigMap, and Route.
+
+### Alternative: Local build + push
+
+If you need to push to an external registry (e.g. Quay), build locally instead:
 
 ```bash
 make build IMAGE_NAME=calculus-agent IMAGE_TAG=v1
@@ -155,61 +186,6 @@ podman push calculus-agent:v1 quay.io/your-org/calculus-agent:v1
     with raw `podman build` on an Apple Silicon Mac, you must include that flag
     yourself or the image will be ARM64, which will not run on x86_64 OpenShift
     nodes.
-
-## Deploy with Helm
-
-!!! info "Deploy mechanisms in this tutorial"
-    Different components use different deploy mechanisms:
-
-    - **Agent** (this module): `helm install` / `helm upgrade` via the chart in
-      `chart/`. The chart produces a Deployment, Service, ConfigMap, and Route.
-    - **MCP server** (Module 3): `./deploy.sh <namespace>`, which applies
-      `openshift.yaml` (BuildConfig + Deployment + Service + Route).
-    - **Gateway and UI** (Module 5): `make build-openshift PROJECT=<namespace>`
-      to build, then `make deploy PROJECT=<namespace>` to deploy.
-
-    The `Makefile` wraps these: `make deploy PROJECT=<namespace>` calls the
-    right tool for each project type.
-
-With the image built, deploy the agent:
-
-```bash
-# Get the internal registry path for the image we just built
-IMAGE=$(oc get is calculus-agent -n calculus-agent --context="$CTX" -o jsonpath='{.status.dockerImageRepository}')
-
-# Deploy the chart
-helm install calculus-agent chart/ \
-  --set image.repository=$IMAGE \
-  --set image.tag=latest \
-  --set image.pullPolicy=Always \
-  --set config.MODEL_ENDPOINT=http://vllm-predictor.model-ns.svc.cluster.local/v1 \
-  --set config.MODEL_NAME=/mnt/models \
-  --set config.OPENAI_API_KEY=not-required \
-  --set route.enabled=true \
-  -n calculus-agent --kube-context="$CTX"
-```
-
-Here is what each `--set` does:
-
-- **`image.repository`** -- points at the image stream in the internal
-  registry. The `oc get is` command retrieves the full path.
-- **`image.tag`** -- `latest` tracks the most recent build. Pin to a specific
-  tag for production.
-- **`image.pullPolicy=Always`** -- forces Kubernetes to pull the image on every
-  pod restart, so you always get the latest build.
-- **`config.MODEL_ENDPOINT`** -- the `/v1` URL of your vLLM or LlamaStack
-  inference endpoint.
-- **`config.MODEL_NAME`** -- the model identifier your endpoint expects.
-- **`config.OPENAI_API_KEY`** -- satisfies the SDK requirement. Set to a real
-  key only if your endpoint requires authentication.
-- **`route.enabled=true`** -- creates an OpenShift Route so you can reach the
-  agent from outside the cluster.
-
-!!! info "What is an ImageStream?"
-    An ImageStream is an OpenShift abstraction that tracks container images in
-    the internal registry. When you build with a BuildConfig, the output image
-    is tagged in an ImageStream. `oc get is` shows you the registry path that
-    Kubernetes needs to pull the image.
 
 ## Verify the deployment
 
@@ -257,9 +233,9 @@ curl -sk "https://$ROUTE/v1/traces" | python -m json.tool
 These are the most common issues and how to fix them.
 
 **ImagePullBackOff** -- Kubernetes cannot pull the container image. The image
-repository path is usually wrong. Run `oc get is -n calculus-agent --context="$CTX"` to find
-the correct internal registry path, then `helm upgrade` with the corrected
-`image.repository` value.
+repository path is usually wrong. Re-run `fips-agents deploy` (it resolves the
+ImageStream automatically) or check the path manually with
+`oc get is -n calculus-agent --context="$CTX"` and `helm upgrade`.
 
 **CrashLoopBackOff** -- the container starts and immediately crashes. Check
 logs with `oc logs deployment/calculus-agent -n calculus-agent --context="$CTX"`. Common causes:
@@ -293,7 +269,9 @@ version, restart the deployment to pick it up:
 ## Redeploying after changes
 
 The development cycle for deployed agents is: edit code, rebuild the image,
-restart the deployment. Here is the sequence:
+restart the deployment. You can re-run `fips-agents deploy` for a full
+rebuild-and-deploy, or use the manual commands for faster iteration when you
+only need to rebuild:
 
 ```bash
 # 1. Rebuild the image in the cluster
@@ -314,9 +292,9 @@ make redeploy PROJECT=calculus-agent
 
 !!! tip "Updating configuration without rebuilding"
     If you only need to change environment variables (model endpoint, log level,
-    etc.), you do not need to rebuild the image. Run `helm upgrade` with the new
-    `--set config.*` values. The ConfigMap checksum annotation in the Deployment
-    template automatically triggers a rolling restart when the ConfigMap changes.
+    etc.), you do not need to rebuild the image. Re-run `fips-agents deploy`
+    with updated `--set config.*` values -- it skips the build when the source
+    hasn't changed. Or use `helm upgrade` directly:
 
     ```bash
     helm upgrade calculus-agent chart/ \
@@ -345,7 +323,21 @@ server:
     enabled: true
 ```
 
-To enable these in a deployed agent, pass the corresponding Helm overrides:
+To enable these in a deployed agent, re-run `fips-agents deploy` with the
+extra config flags:
+
+```bash
+fips-agents deploy --context="$CTX" -n calculus-agent \
+  --set config.MODEL_ENDPOINT=$MODEL_ENDPOINT \
+  --set config.MODEL_NAME=$MODEL_NAME \
+  --set config.OPENAI_API_KEY=not-required \
+  --set config.STORAGE_BACKEND=sqlite \
+  --set config.SESSIONS_ENABLED=true \
+  --set config.TRACES_ENABLED=true \
+  --set config.METRICS_ENABLED=true
+```
+
+Or apply just the observability flags with `helm upgrade --reuse-values`:
 
 ```bash
 helm upgrade calculus-agent chart/ \

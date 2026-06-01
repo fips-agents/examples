@@ -45,32 +45,344 @@ MaaS requires several platform components: Red Hat Connectivity Link
 (Kuadrant, Authorino, Limitador), a PostgreSQL database for API key
 management, an API gateway with TLS, and dashboard configuration.
 
-Follow the official Red Hat guide to deploy MaaS:
-
-**[Deploy and manage Models-as-a-Service](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/deploy-and-manage-models-as-a-service_maas#maas-prerequisites_maas-deploy)**
+The authoritative reference is the
+[official Red Hat guide](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/deploy-and-manage-models-as-a-service_maas).
+The steps below inline the key operations with troubleshooting context that
+the official guide does not cover.
 
 !!! note "Red Hat account required"
     The official guide requires a Red Hat login. If you don't have one,
     create a free account at [access.redhat.com](https://access.redhat.com).
 
-Work through the prerequisites section and the initial configuration steps.
-When you are done, verify the deployment:
+### Step 1: Install the Limitador operator
+
+Subscribe from OperatorHub on the `stable` channel from the
+`redhat-operators` catalog. The operator installs into `openshift-operators`.
+
+```bash
+oc apply -f - <<EOF
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: limitador-operator
+  namespace: openshift-operators
+spec:
+  channel: stable
+  name: limitador-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+EOF
+```
+
+Wait for the CSV to succeed:
+
+```bash
+oc get csv -n openshift-operators -l operators.coreos.com/limitador-operator.openshift-operators
+```
+
+### Step 2: Install or upgrade the Authorino operator
+
+!!! warning "Upgrading from RHOAI 3.3"
+    If you have Authorino v1.1.3 on the `tech-preview-v1` channel, it is
+    too old for Connectivity Link. Delete the old Subscription and CSV
+    first, then install fresh on `stable`. This can briefly disrupt cluster
+    auth.
+
+    ```bash
+    oc delete subscription authorino-operator -n openshift-operators
+    oc delete csv -l operators.coreos.com/authorino-operator.openshift-operators \
+      -n openshift-operators
+    ```
+
+For a fresh install, subscribe on the `stable` channel (v1.3.0+):
+
+```bash
+oc apply -f - <<EOF
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: authorino-operator
+  namespace: openshift-operators
+spec:
+  channel: stable
+  name: authorino-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+EOF
+```
+
+The operator installs into `openshift-operators`, but the Authorino CR will
+live in `kuadrant-system` (managed by RHCL in Step 4).
+
+### Step 3: Install the Red Hat Connectivity Link (RHCL) operator
+
+Subscribe on the `stable` channel (v1.3.3). This brings Kuadrant
+capabilities to the cluster.
+
+```bash
+oc apply -f - <<EOF
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: connectivity-link-operator
+  namespace: openshift-operators
+spec:
+  channel: stable
+  name: rhcl-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+EOF
+```
+
+### Step 4: Create the Kuadrant CR
+
+Installing the RHCL operator is not enough -- you must also create the
+Kuadrant custom resource:
+
+```bash
+oc create namespace kuadrant-system --dry-run=client -o yaml | oc apply -f -
+
+oc apply -f - <<EOF
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: kuadrant-system
+spec: {}
+EOF
+```
+
+Wait for Ready:
+
+```bash
+oc get kuadrant kuadrant -n kuadrant-system \
+  -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+# Should print True
+```
+
+!!! warning "Kuadrant stuck in MissingDependency"
+    Kuadrant checks for Limitador during initialization and caches a
+    `MissingDependency` status permanently if Limitador was not ready in
+    time. If the Kuadrant CR stays in `MissingDependency` after Limitador
+    is healthy, restart the Kuadrant operator pod:
+
+    ```bash
+    oc delete pod -l app.kubernetes.io/name=kuadrant-operator \
+      -n kuadrant-system
+    ```
+
+    Then re-check readiness.
+
+### Step 5: Deploy PostgreSQL and create the database secret
+
+MaaS needs PostgreSQL for API key management. Deploy PostgreSQL however your
+cluster standards require, then create the connection secret in the
+`redhat-ods-applications` namespace:
+
+```bash
+oc create secret generic maas-db-config \
+  -n redhat-ods-applications \
+  --from-literal=DB_CONNECTION_URL="postgresql://<user>:<password>@<postgres-host>:5432/<dbname>"
+```
+
+!!! tip "Database timing"
+    If the `maas-api` pod starts before the database is ready, the schema
+    will not initialize. Restart it after the database is available:
+
+    ```bash
+    oc rollout restart deployment/maas-api -n redhat-ods-applications
+    ```
+
+### Step 6: Create the MaaS gateway
+
+Create a Gateway in the `openshift-ingress` namespace with ClusterIP service
+type and passthrough Routes for external access.
+
+```yaml
+# maas-gateway.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: maas-default-gateway
+  namespace: openshift-ingress
+  annotations:
+    opendatahub.io/managed: "false"
+    security.opendatahub.io/authorino-tls-bootstrap: "true"
+spec:
+  gatewayClassName: data-science-gateway-class  # (1)
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: maas-default-gateway-cert
+      allowedRoutes:
+        namespaces:
+          from: All
+```
+
+1. Find your GatewayClass: `oc get gatewayclasses`
+
+Then create two passthrough Routes for external access:
+
+```yaml
+# maas-routes.yaml
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: maas-gateway
+  namespace: openshift-ingress
+spec:
+  host: maas.apps.<cluster-domain>
+  to:
+    kind: Service
+    name: maas-default-gateway-data-science-gateway-class
+  port:
+    targetPort: https
+  tls:
+    termination: passthrough
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: maas-inference-gateway
+  namespace: openshift-ingress
+spec:
+  host: inference.maas.apps.<cluster-domain>
+  to:
+    kind: Service
+    name: maas-default-gateway-data-science-gateway-class
+  port:
+    targetPort: https
+  tls:
+    termination: passthrough
+```
+
+```bash
+oc apply -f maas-gateway.yaml
+oc apply -f maas-routes.yaml
+```
+
+!!! warning "Do not put hostnames on Gateway listeners"
+    The gateway service uses ClusterIP with passthrough Routes for external
+    access. Placing hostnames directly on listeners can cause DNS record
+    hijacking -- the gateway takes over records from OpenShift's default
+    router.
+
+    Also note: `*.maas.apps.<domain>` (wildcard) matches subdomains like
+    `inference.maas.apps.<domain>` but NOT the bare `maas.apps.<domain>`.
+    If you need both, create explicit Routes for each.
+
+### Step 7: Configure TLS for Authorino
+
+Three steps are required -- setting `certSecretRef` alone is not enough.
+
+**7a.** Annotate the Authorino service for a serving certificate:
+
+```bash
+oc annotate service authorino-authorino-authorization \
+  service.beta.openshift.io/serving-cert-secret-name=authorino-server-cert \
+  -n kuadrant-system
+```
+
+**7b.** Patch the Authorino CR with TLS enabled:
+
+```bash
+oc patch authorino authorino -n kuadrant-system --type merge -p '{
+  "spec": {
+    "listener": {
+      "tls": {
+        "enabled": true,
+        "certSecretRef": {
+          "name": "authorino-server-cert"
+        }
+      }
+    }
+  }
+}'
+```
+
+!!! warning "`enabled: true` is required"
+    Setting only `certSecretRef` looks correct but fails silently --
+    gateway-to-Authorino communication breaks and models will not appear
+    in Gen AI Studio. You must set `enabled: true` alongside
+    `certSecretRef`.
+
+**7c.** Add CA bundle environment variables to the Authorino deployment:
+
+```bash
+oc set env deployment/authorino \
+  SSL_CERT_FILE=/etc/ssl/certs/openshift-service-ca/service-ca-bundle.crt \
+  REQUESTS_CA_BUNDLE=/etc/ssl/certs/openshift-service-ca/service-ca-bundle.crt \
+  -n kuadrant-system
+```
+
+### Step 8: Enable User Workload Monitoring
+
+```bash
+oc apply -f - <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    enableUserWorkload: true
+EOF
+```
+
+Without User Workload Monitoring, MaaS reports a Degraded status.
+
+### Step 9: Enable MaaS in the DataScienceCluster
+
+```bash
+oc patch dsc default-dsc --type merge -p '{
+  "spec": {
+    "components": {
+      "kserve": {
+        "modelsAsService": {
+          "managementState": "Managed"
+        }
+      }
+    }
+  }
+}'
+```
+
+### Step 10: Enable dashboard feature flags
+
+```bash
+oc patch odhdashboardconfig odh-dashboard-config \
+  -n redhat-ods-applications --type merge -p '{
+  "spec": {
+    "dashboardConfig": {
+      "modelAsService": true,
+      "genAiStudio": true,
+      "maasAuthPolicies": true
+    }
+  }
+}'
+```
+
+### Step 11: Verify the deployment
 
 ```bash
 oc get tenants.maas.opendatahub.io default-tenant \
   -n models-as-a-service
-# READY should be True
 ```
 
-!!! warning "Gotchas we found during testing"
-    These issues are not covered in the official guide but came up during
-    our validation on fresh clusters:
+READY should be True. If it is not, work backwards through Kuadrant CR
+status, Authorino TLS configuration, and User Workload Monitoring.
 
+!!! warning "Additional troubleshooting"
     **AI Hub model catalog requires Model Registry.** To see the model
-    catalog under AI Hub in the dashboard, enable `modelregistry` in the
-    DSC and `llamastackoperator` for GenAI Studio:
+    catalog under AI Hub in the dashboard, enable `modelregistry` and
+    `llamastackoperator` in the DSC:
 
-    ```
+    ```bash
     oc patch dsc default-dsc --type merge -p '{
       "spec": {
         "components": {
@@ -85,25 +397,15 @@ oc get tenants.maas.opendatahub.io default-tenant \
     ```
 
     **Gateway must allow cross-namespace routes.** The MaaS controller
-    creates HTTPRoutes in model namespaces. Add
-    `allowedRoutes.namespaces.from: All` to the gateway listener, or model
-    deployments fail with `NotAllowedByListeners`.
+    creates HTTPRoutes in model namespaces. The
+    `allowedRoutes.namespaces.from: All` in the gateway listener handles
+    this -- if you see `NotAllowedByListeners`, check your gateway config.
 
-    **Restart maas-api after creating the database.** If PostgreSQL is
-    deployed after the `maas-api` pod starts, the database schema won't
-    be initialized. Run
-    `oc rollout restart deployment/maas-api -n redhat-ods-applications`
-    to trigger the migration.
-
-    **GPU node taints.** If your GPU nodes have a `nvidia.com/gpu:NoSchedule`
-    taint, the `LLMInferenceService` controller does not propagate
-    tolerations from hardware profiles. Either remove the taint from GPU
-    nodes or patch the Deployment directly after model deployment.
-
-    **Authorino upgrade from RHOAI 3.3.** If upgrading from 3.3, the
-    Authorino operator (v1.1.3, `tech-preview-v1` channel) is too old for
-    Connectivity Link. Delete the old Subscription and CSV, then recreate
-    on the `stable` channel. This can briefly disrupt cluster auth.
+    **GPU node taints.** If your GPU nodes have a
+    `nvidia.com/gpu:NoSchedule` taint, the `LLMInferenceService`
+    controller does not propagate tolerations from hardware profiles.
+    Either remove the taint from GPU nodes or patch the Deployment
+    directly after model deployment.
 
 ## Part 2: Deploy a model from the AI Hub catalog
 
