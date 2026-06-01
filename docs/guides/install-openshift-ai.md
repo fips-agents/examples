@@ -15,7 +15,7 @@ are already present when the DataScienceCluster reconciles.
 - OpenShift 4.20+ on AWS (see [Choosing a Cluster](cluster-options.md))
 - `cluster-admin` rights
 - `oc` logged in to the cluster
-- Budget for a GPU instance (~$1.60/hr for `g6e.4xlarge`)
+- Budget for a GPU instance (approximately $1.60/hr for `g6e.4xlarge` at time of writing)
 
 This tutorial targets **Red Hat OpenShift AI 3.x** via the `fast-3.x`
 channel (validated on 3.3.1). RHOAI 3.x requires OpenShift 4.19 or later.
@@ -35,6 +35,21 @@ channel (validated on 3.3.1). RHOAI 3.x requires OpenShift 4.19 or later.
     ```bash
     export CTX=$(oc config current-context)
     ```
+
+---
+
+## Get the manifests
+
+The YAML manifests used in this guide live in the repo under `manifests/platform/`.
+Clone the repo if you haven't already:
+
+```bash
+git clone https://github.com/fips-agents/examples.git
+cd examples/manifests/platform
+```
+
+Each step below also shows the YAML inline for reference, so you can review
+what each manifest contains before applying it.
 
 ---
 
@@ -75,7 +90,7 @@ spec:
 ```
 
 ```bash
-oc apply --context="$CTX" -f nfd-subscription.yaml
+oc apply --context="$CTX" -f nfd-operatorgroup-subscription.yaml
 ```
 
 Wait for the operator to install:
@@ -147,8 +162,9 @@ oc apply --context="$CTX" -f gpu-operator-subscription.yaml
 Because `installPlanApproval` is `Manual`, you need to find and approve the
 InstallPlan:
 
+Wait for the InstallPlan to appear:
+
 ```bash
-# Wait for the InstallPlan to appear
 oc get installplan --context="$CTX" -n nvidia-gpu-operator -w
 ```
 
@@ -225,8 +241,9 @@ The script below exports the first worker MachineSet, changes the instance
 type to `g6e.4xlarge` (1 NVIDIA L40S, 48 GB VRAM), increases the disk to
 200 GB, adds the `nvidia.com/gpu` taint, and sets replicas to 1:
 
+Clone an existing worker MachineSet for GPU:
+
 ```bash
-# Clone an existing worker MachineSet for GPU
 WORKER_MS=$(oc get machineset --context="$CTX" -n openshift-machine-api \
   -o jsonpath='{.items[0].metadata.name}')
 
@@ -262,14 +279,17 @@ oc get machineset "$WORKER_MS" --context="$CTX" -n openshift-machine-api -o json
     `Ready`:
 
     ```bash
-    oc get nodes --context="$CTX" -w
+    oc get nodes --context="$CTX" \
+      -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[-1].type,GPU:.status.capacity."nvidia\.com/gpu" -w
     ```
 
 !!! tip "Instance type alternatives"
-    `g6e.4xlarge` provides an L40S with 48 GB VRAM at ~$1.60/hr. If your
-    region doesn't have `g6e` availability, `g5.4xlarge` (A10G, 24 GB VRAM,
-    ~$1.20/hr) also works for tutorial-sized models. Adjust `instanceType` in
-    the `jq` command above.
+    `g6e.4xlarge` provides an L40S with 48 GB VRAM (approximately $1.60/hr
+    at time of writing). If your region doesn't have `g6e` availability,
+    `g5.4xlarge` (A10G, 24 GB VRAM, approximately $1.20/hr at time of
+    writing) also works for tutorial-sized models. Adjust `instanceType` in
+    the `jq` command above. Check current AWS pricing for your region and
+    account agreement.
 
 ## Step 5: Create a DataScienceCluster
 
@@ -294,6 +314,9 @@ spec:
       rawDeploymentServiceConfig: Headless
     dashboard:
       managementState: Managed
+    modelregistry:
+      managementState: Managed
+      registriesNamespace: rhoai-model-registries
     llamastackoperator:
       # RHOAI 3.x bundles a LlamaStack/OGX operator. We install the upstream
       # ogx-k8s-operator in install-ogx.md instead (the rebrand hasn't shipped
@@ -302,11 +325,29 @@ spec:
       managementState: Removed
 ```
 
+!!! info "Model registry"
+    Enabling `modelregistry` makes the Red Hat AI model catalog available in
+    the RHOAI dashboard under **AI hub**, so you can browse and deploy models
+    from the UI.
+
 Apply it:
 
 ```bash
 oc apply --context="$CTX" -f dsc.yaml
 ```
+
+!!! warning "Wait for GPU node readiness"
+    If you started Steps 4 and 5 in parallel, pause here until your GPU
+    node is fully ready. The ClusterPolicy's driver daemonsets need a GPU
+    node to schedule on. Confirm the node is `Ready` and reporting GPU
+    capacity:
+
+    ```bash
+    oc get nodes --context="$CTX" \
+      -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[-1].type,GPU:.status.capacity."nvidia\.com/gpu"
+    ```
+
+    You should see one node with `1` in the GPU column before proceeding.
 
 ## Step 6: Apply the NVIDIA ClusterPolicy
 
@@ -382,14 +423,20 @@ oc get clusterpolicy gpu-cluster-policy --context="$CTX" \
   -o jsonpath='{.status.state}{"\n"}' -w
 ```
 
+!!! note
+    The ClusterPolicy status may briefly show `notReady` while driver
+    daemonsets initialize on the GPU node. This is normal — wait for it to
+    settle to `ready`.
+
 ## Step 7: Verify
 
 Check that the DataScienceCluster is ready:
 
 ```bash
 oc get dsc default-dsc --context="$CTX" -o jsonpath='{.status.phase}'
-# Ready
 ```
+
+The output should show `Ready`.
 
 The Dashboard hostname should also resolve. RHOAI 3.x exposes the
 dashboard via Gateway API (not a plain `Route` in `redhat-ods-applications`):
@@ -420,11 +467,13 @@ All pods should be `Running` or `Completed`. If any are stuck in
 If `kserve` shows `Ready` in the DSC status and a GPU node reports capacity,
 you're done.
 
-## (Optional) Create a Hardware Profile
+## Step 8: Create a Hardware Profile
 
-If you use the RHOAI dashboard to deploy models, a HardwareProfile makes
-GPU resources selectable in the UI. This step is optional if you only deploy
-models via CLI manifests.
+A HardwareProfile makes GPU resources selectable in the RHOAI dashboard when
+deploying models. Before applying the manifest, open the RHOAI dashboard and
+navigate to **Settings > Hardware profiles**. Note the default profile that
+is already listed. Then apply the manifest and refresh the page to see the
+new NVIDIA GPU profile appear.
 
 ```yaml
 apiVersion: infrastructure.opendatahub.io/v1
