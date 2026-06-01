@@ -198,7 +198,12 @@ you skip it:
 cd calculus-gateway
 make build-openshift PROJECT=calculus-agent
 
+# Resolve the image path from the ImageStream the build created
+GW_IMAGE=$(oc get is calculus-gateway --context="$CTX" -n calculus-agent \
+  -o jsonpath='{.status.dockerImageRepository}')
+
 helm upgrade --install calculus-gateway chart/ \
+  --set image.repository=$GW_IMAGE \
   --set config.BACKEND_URL=http://calculus-agent:8080 \
   -n calculus-agent --kube-context="$CTX"
 
@@ -206,8 +211,11 @@ oc rollout status deployment/calculus-gateway -n calculus-agent --context="$CTX"
 ```
 
 `make build-openshift` creates a BuildConfig (if one doesn't already exist),
-uploads the source, and builds the image in the cluster. The `helm upgrade
---install` deploys the chart with the correct backend URL from the start.
+uploads the source, and builds the image in the cluster. The `oc get is`
+command reads the internal registry path from the resulting ImageStream --
+without `--set image.repository`, the chart defaults to a short name that
+the cluster cannot pull. The `helm upgrade --install` deploys the chart with
+the correct image and backend URL from the start.
 
 !!! note "In-cluster service DNS"
     `http://calculus-agent:8080` uses Kubernetes short-name DNS. This works
@@ -239,7 +247,12 @@ gateway pod --> agent service --> agent pod.
 cd calculus-ui
 make build-openshift PROJECT=calculus-agent
 
+# Resolve the image path from the ImageStream the build created
+UI_IMAGE=$(oc get is calculus-ui --context="$CTX" -n calculus-agent \
+  -o jsonpath='{.status.dockerImageRepository}')
+
 helm upgrade --install calculus-ui chart/ \
+  --set image.repository=$UI_IMAGE \
   --set config.API_URL=http://calculus-gateway:8080 \
   -n calculus-agent --kube-context="$CTX"
 

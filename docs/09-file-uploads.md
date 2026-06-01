@@ -176,37 +176,34 @@ files:
   # bytes_dir defaults to ./files inside the container; mount a PVC there.
 ```
 
-!!! warning "S3-compatible bytes backend is not yet shipped"
-    The agent server keeps bytes on local FS regardless of the metadata
-    backend. An S3-compatible `BytesStore` ABC is on the roadmap. Until
-    it lands, multi-replica deployments need a `ReadWriteMany` PVC or a
-    sticky-session ingress to keep uploads consistent.
+!!! tip "S3-compatible bytes backend"
+    The agent server supports an S3-compatible `BytesStore` backend
+    (`bytes_backend.type: s3` in `agent.yaml`). Use it for multi-replica
+    deployments so pods don't need a shared `ReadWriteMany` PVC.
 
-### MinIO as the bytes target (looking ahead)
+### MinIO as the bytes target
 
-When the S3 backend lands, the recommended setup will be a **MinIO**
-deployment alongside the agent:
+The recommended S3-compatible setup is a **MinIO** deployment alongside
+the agent:
 
 ```bash
-# Future scaffolding (not yet shipped):
 helm install minio bitnami/minio \
   -n calculus-agent \
   --set auth.rootUser=agent --set auth.rootPassword='<from-secret>' \
   --set defaultBuckets=agent-files
 
-# agent.yaml would then point at:
+# agent.yaml — point at the MinIO service:
 files:
-  bytes_backend: s3
-  s3:
-    endpoint: http://minio:9000
-    bucket: agent-files
-    access_key_secret: minio-credentials
+  bytes_backend:
+    type: s3
+    s3:
+      endpoint: http://minio:9000
+      bucket: agent-files
+      access_key_secret: minio-credentials
 ```
 
 MinIO is on-cluster, supports the S3 API, and works with the FIPS-validated
-TLS settings discussed in [Module 8](08-secrets-and-production.md). For now
-treat this as documentation of intent — keep an eye on agent-template#100
-for the real release.
+TLS settings discussed in [Module 8](08-secrets-and-production.md).
 
 ## Security: defense in depth
 

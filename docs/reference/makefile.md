@@ -126,6 +126,20 @@ make redeploy PROJECT=calculus-demo
 make clean PROJECT=calculus-demo
 ```
 
+!!! tip "Single-command alternative"
+    The `fips-agents deploy` command handles deployment for both agents and MCP
+    servers in one step. It auto-detects the project type and applies the
+    appropriate deployment method:
+    
+    ```bash
+    # Works for both agent and MCP server projects
+    fips-agents deploy --context="$CTX" -n calculus-demo
+    ```
+    
+    This is the **recommended approach** for day-to-day development. The Makefile
+    targets are still useful for scripting, CI/CD pipelines, or when you need
+    fine-grained control over the deployment process.
+
 === "Agent"
 
     `deploy` calls `deploy.sh`, which applies the Helm chart from `chart/`.

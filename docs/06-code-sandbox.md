@@ -104,11 +104,16 @@ When `sandbox.enabled` is `true`, the Helm chart does two things:
 The sidecar shares the pod's network namespace, so the agent reaches it at
 `localhost:8000` with no Service or Route required.
 
-Deploy the updated chart:
+Deploy the updated chart, pointing at the ImageStream the build created:
 
 ```bash
+# Resolve the sandbox image path from the ImageStream
+SANDBOX_IMAGE=$(oc get is code-sandbox --context="$CTX" -n calculus-agent \
+  -o jsonpath='{.status.dockerImageRepository}')
+
 helm upgrade calculus-agent chart/ \
   --set sandbox.enabled=true \
+  --set sandbox.image.repository=$SANDBOX_IMAGE \
   --reuse-values \
   -n calculus-agent --kube-context="$CTX"
 ```
