@@ -124,13 +124,15 @@ async def step(self) -> StepResult:
     export CTX=$(oc config current-context)
     ```
 
-Before deploying, verify the model name your endpoint expects:
+Before deploying, verify the model name your OGX endpoint expects and
+store it in a variable:
 
 ```bash
-curl -sk "$OGX_ENDPOINT/models" | jq '.data[].id'
+OGX_MODEL=$(curl -sk "$OGX_ENDPOINT/models" | jq -r '.data[0].id')
+echo "$OGX_MODEL"
 ```
 
-Use the model ID returned by this command as your `MODEL_NAME`.
+This should print the OGX-prefixed model name (e.g. `vllm/RedHatAI/gpt-oss-20b`).
 
 Make sure you're in the `calculus-agent/` directory:
 
@@ -138,7 +140,7 @@ Make sure you're in the `calculus-agent/` directory:
 pwd
 ```
 
-Start the build and redeploy with the OGX-prefixed model name (see warning above):
+Build and redeploy:
 
 ```bash
 oc start-build calculus-agent --from-dir=. --follow -n calculus-agent --context="$CTX"
@@ -147,7 +149,7 @@ oc set env deployment/calculus-agent -n calculus-agent --context="$CTX" \
   PLATFORM_MODE=true \
   OGX_ENDPOINT="$OGX_ENDPOINT" \
   OGX_SHIELD="$OGX_SHIELD" \
-  MODEL_NAME="vllm/RedHatAI/gpt-oss-20b"
+  MODEL_NAME="$OGX_MODEL"
 
 oc rollout restart deployment/calculus-agent -n calculus-agent --context="$CTX"
 oc rollout status deployment/calculus-agent -n calculus-agent --context="$CTX" --timeout=180s
