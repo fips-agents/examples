@@ -117,9 +117,9 @@ wrong.
 
 ## Update the agent code
 
-Rename the class and update the docstring to reflect the new domain. The
-`step()` method stays the same -- `run_tool_calls()` already handles MCP tools
-the same way it handles local ones.
+Open `src/agent.py` and rename the class and docstring to reflect the new
+domain. The `step()` method stays the same -- `run_tool_calls()` already
+handles MCP tools the same way it handles local ones.
 
 ```python
 """Calculus Helper — uses MCP-connected math tools to solve calculus problems."""
