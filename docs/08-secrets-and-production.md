@@ -46,33 +46,6 @@ the host kernel does not have FIPS enabled.
     calls an external endpoint that requires legacy ciphers (CBC, RC4), the TLS
     handshake will fail. The fix is on the remote endpoint, not your agent.
 
-## The litellm migration
-
-The agent runtime originally used **litellm** as an LLM abstraction layer. Two
-problems forced a switch:
-
-1. **FIPS incompatibility.** litellm's dependency tree pulls in cryptographic
-   libraries that are not FIPS-validated. On a FIPS-enabled cluster, these
-   libraries either fail at import time or silently use non-compliant algorithms.
-
-2. **Supply chain compromise.** litellm versions `1.82.7` and `1.82.8` were
-   compromised in a supply chain attack (March 2026). The malicious versions
-   exfiltrated API keys to an external endpoint.
-
-The fix was straightforward: replace litellm with the `openai` async SDK.
-vLLM, LlamaStack, llm-d, and most inference servers expose an
-OpenAI-compatible API, so litellm's abstraction layer was adding complexity
-without adding value. The result is a simpler dependency tree that is easier to
-audit, FIPS-compliant, and free of supply chain risk.
-
-!!! warning "Never install litellm 1.82.7 or 1.82.8"
-    These versions are compromised. If you encounter them in a lockfile or
-    dependency tree, pin to `>=1.83.0` or `<=1.82.6`.
-
-The takeaway: fewer dependencies means a smaller attack surface. Prefer
-standard SDKs over abstraction layers when the abstraction doesn't carry its
-weight.
-
 ## Secrets management
 
 Production credentials must never appear in `agent.yaml`, prompts, or source
