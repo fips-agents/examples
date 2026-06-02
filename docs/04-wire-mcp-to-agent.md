@@ -170,10 +170,18 @@ results, and re-calls the model until no more tool calls remain.
 
 ## Rebuild and redeploy
 
-With the three files updated, rebuild and redeploy:
+With the three files updated, rebuild and redeploy. Make sure you're in
+the `calculus-agent/` directory -- `--from-dir=.` uploads whatever is in
+your current directory, so running it from the wrong project will deploy
+the wrong code.
 
 ```bash
-# Rebuild the image in the cluster
+pwd
+```
+
+You should see `calculus-agent` at the end of the path. Then rebuild:
+
+```bash
 oc start-build calculus-agent --from-dir=. --follow --context="$CTX" -n calculus-agent
 
 # Restart the deployment to pick up the new image
