@@ -206,12 +206,17 @@ oc rollout status deployment/calculus-agent --context="$CTX" -n calculus-agent
 
 Verify the agent discovered the MCP tools:
 
-```bash
-# Note: this is the *agent* route in calculus-agent. The MCP server's route
-# from Module 3 lives in calculus-mcp -- if your shell still has $ROUTE from
-# that session, re-export it here so you don't curl the wrong service.
-AGENT_ROUTE=$(oc get route calculus-agent --context="$CTX" -n calculus-agent -o jsonpath='{.spec.host}')
+Note: this is the **agent** route in `calculus-agent`, not the MCP
+server route from Module 3.
 
+```bash
+AGENT_ROUTE=$(oc get route calculus-agent --context="$CTX" -n calculus-agent -o jsonpath='{.spec.host}')
+echo "$AGENT_ROUTE"
+```
+
+Verify the route printed correctly, then check the agent info:
+
+```bash
 curl -sk "https://$AGENT_ROUTE/v1/agent-info" | python -m json.tool
 ```
 
