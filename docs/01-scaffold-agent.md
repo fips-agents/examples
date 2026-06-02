@@ -85,35 +85,16 @@ any OpenAI-compatible API -- vLLM, LlamaStack, llm-d, or even OpenAI itself.
 Set it to `anthropic`, `bedrock`, or `azure` to route through an adapter
 sidecar instead.
 
-!!! tip "Environment variable substitution"
-    `${MODEL_ENDPOINT:-http://llamastack:8321/v1}` means: use the
-    `MODEL_ENDPOINT` env var if set, otherwise fall back to
-    `http://llamastack:8321/v1`. This pattern appears throughout
-    `agent.yaml`. It lets a single config file work unchanged across local
-    development, staging, and production -- you only override what differs
-    via ConfigMaps or Secrets in OpenShift.
+The `${VAR:-default}` syntax means: use the environment variable `VAR` if it
+is set, otherwise fall back to the value after `:-`. For example,
+`${MODEL_ENDPOINT:-http://llamastack:8321/v1}` uses the `MODEL_ENDPOINT`
+environment variable if available, or `http://llamastack:8321/v1` as a
+fallback. You don't need to edit `agent.yaml` -- when you deploy to OpenShift
+in Module 2, a Kubernetes ConfigMap injects the real values as environment
+variables, and the substitution happens automatically at runtime.
 
-### Configure your model
-
-The scaffold defaults point at a LlamaStack endpoint that won't exist on
-your cluster. Before running the agent, set the environment variables that
-the `${VAR:-default}` placeholders will pick up. These are the values you
-exported in the [Serve an LLM](guides/serve-an-llm.md) guide:
-
-```bash
-export MODEL_ENDPOINT="..."
-export MODEL_NAME="..."
-export OPENAI_API_KEY="..."
-```
-
-If you haven't deployed a model yet, complete the
-[Serve an LLM](guides/serve-an-llm.md) guide first.
-
-!!! tip "Local development endpoint"
-    When running the agent on your laptop, use the **external route URL**
-    for the model endpoint (the `apps.<cluster-domain>` URL). The internal
-    service URL (`svc.cluster.local`) is only reachable from inside the
-    cluster and is used when the agent is deployed to OpenShift.
+You'll find your actual model values and configure them in
+[Module 2](02-configure-and-deploy.md) when you deploy to OpenShift.
 
 ### MCP servers
 
@@ -338,7 +319,7 @@ Key conventions:
 
 ## Run it locally
 
-Install dependencies and start the agent:
+Install dependencies and verify the scaffold starts correctly:
 
 ```bash
 make install
@@ -347,7 +328,9 @@ make run-local
 
 `make install` creates a virtual environment in `.venv/` and installs
 `fipsagents` plus your project's dependencies. `make run-local` starts the
-HTTP server on port 8080.
+HTTP server on port 8080. The agent won't be able to reach an LLM yet --
+the defaults point at a LlamaStack endpoint that doesn't exist. That's
+expected; you'll configure the real endpoint in Module 2.
 
 Once you see `Uvicorn running on http://0.0.0.0:8080`, test it:
 
@@ -389,9 +372,9 @@ curl localhost:8080/v1/agent-info | python -m json.tool
 }
 ```
 
-The `model.name` value reflects your `MODEL_NAME` environment variable. If you
-set it in the previous section, you'll see your model name here instead of the
-scaffold default.
+The `model.name` value shows the default from `agent.yaml`. This will
+change to your actual model once you deploy with the correct ConfigMap
+values in Module 2.
 
 The `tools` array lists every tool registered with `llm_only` or `both`
 visibility. The two shown above are **stock tools** that BaseAgent always
@@ -411,6 +394,6 @@ Stop the server with `Ctrl+C`.
 
 ## What's next
 
-The scaffolded project runs and is connected to your LLM. In
-[Module 2](02-configure-and-deploy.md), you'll customize the agent identity
-and deploy it to OpenShift.
+The scaffolded project starts and serves its health and info endpoints. In
+[Module 2](02-configure-and-deploy.md), you'll find your model endpoint in
+OpenShift, configure the agent, and deploy it to the cluster.

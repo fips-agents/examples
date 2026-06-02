@@ -1,50 +1,83 @@
 # Module 2: Configure and Deploy to OpenShift
 
-Now that you understand the project layout, it is time to configure the agent
-for a real LLM endpoint and deploy it to OpenShift. By the end of this module
-your agent will be running in a pod, reachable over HTTPS, and answering
-questions using a model served by vLLM or LlamaStack.
+Now that you understand the project layout, it is time to find your model
+endpoint, configure the agent, and deploy it to OpenShift. By the end of
+this module your agent will be running in a pod, reachable over HTTPS, and
+answering questions using your LLM.
 
-## Set your model endpoint
+## Find your model values
 
-Open `agent.yaml` and find the `model:` section. This is where you tell the
-agent which LLM to call. Every value supports `${VAR:-default}` substitution,
-so the same file works for local development (use the defaults) and production
-(inject env vars via ConfigMap).
+The agent needs three values to connect to your LLM. How you find them
+depends on how the model was deployed. This is a practical exercise in
+navigating OpenShift -- a skill you'll use throughout your work with the
+platform.
 
-```yaml
-model:
-  endpoint: ${MODEL_ENDPOINT:-http://vllm-predictor.model-ns.svc.cluster.local/v1}
-  name: ${MODEL_NAME:-/mnt/models}
-  temperature: 0.7
-  max_tokens: 4096
-```
+### MODEL_ENDPOINT
 
-The `endpoint` is an OpenAI-compatible `/v1` URL. The `name` is whatever the
-inference server expects as the model identifier -- for vLLM this is typically
-the Hugging Face model ID or `/mnt/models` if the model is loaded from a local
-path.
+The URL where your model is listening for OpenAI-compatible API requests.
 
-!!! tip "Finding your model endpoint"
-    **Catalog deploy**: Open the RHOAI dashboard, click on your deployed
-    model, and look under **Inference endpoints**. Use the **external URL**
-    for local development and the **internal URL** for deployed agents.
+=== "Catalog deploy (RHOAI dashboard)"
 
-    **Manual deploy**: The internal service URL follows the pattern:
+    1. Open the RHOAI dashboard
+    2. Navigate to **Models > Deployed models**
+    3. Click on your deployed model
+    4. Under **Inference endpoints**, find the **Internal** URL
+    5. Append `/v1` to get the full endpoint, for example:
 
-        http://<inference-service-name>-predictor.<namespace>.svc.cluster.local:8000/v1
+            https://redhataigpt-oss-20b-predictor.gpt-oss-model.svc.cluster.local:8443/v1
 
-    List all InferenceServices across namespaces to find yours:
+=== "Manual deploy (CLI)"
 
-        oc get inferenceservice -A --context="$CTX"
+    Find the InferenceService and construct the URL from its name and
+    namespace:
 
-!!! info "Why OPENAI_API_KEY?"
-    The OpenAI Python SDK requires an API key even when calling unauthenticated
-    endpoints. If you deployed the model **manually** (unauthenticated vLLM),
-    set `OPENAI_API_KEY` to any non-empty string (e.g. `not-required`). If you
-    deployed **from the catalog**, use the service account token shown in the
-    RHOAI dashboard under the model's Inference endpoints section. The agent's
-    ConfigMap handles this for you in the Helm deploy step below.
+    ```bash
+    oc get inferenceservice -A --context="$CTX"
+    ```
+
+    The internal service URL follows the pattern:
+
+        http://<name>-predictor.<namespace>.svc.cluster.local:8000/v1
+
+    !!! warning "Headless service port"
+        If your DataScienceCluster uses `rawDeploymentServiceConfig: Headless`,
+        you must include `:8000` in the URL. The InferenceService's
+        `.status.url` omits it. See the
+        [Serve an LLM](guides/serve-an-llm.md) guide for details.
+
+=== "Instructor-provided or external"
+
+    Your instructor or provider will give you the endpoint URL. It should
+    end with `/v1` (e.g. `https://api.example.com/v1`).
+
+### MODEL_NAME
+
+The model identifier that the inference server expects.
+
+- **Catalog deploy**: Click your model in the RHOAI dashboard. The name
+  shown is the model ID -- typically a slug like `redhataigpt-oss-20b`
+  (not the Hugging Face path). You can also query it:
+
+        curl -sk <your-endpoint>/models -H "Authorization: Bearer <token>" | jq '.data[].id'
+
+- **Manual deploy**: Usually the Hugging Face model ID, e.g.
+  `RedHatAI/gpt-oss-20b`.
+- **External**: Whatever your provider calls the model.
+
+### OPENAI_API_KEY
+
+An authentication token for the model endpoint.
+
+- **Catalog deploy**: Find the service account token in the RHOAI
+  dashboard under your model's **Inference endpoints** section.
+- **Manual deploy**: vLLM doesn't require authentication by default.
+  Set this to `not-required` -- the OpenAI Python SDK requires a
+  non-empty value even for unauthenticated endpoints.
+- **External**: Your API key from the provider.
+
+---
+
+Note these three values -- you'll use them in the Helm deploy step below.
 
 ## Set agent identity
 
@@ -145,9 +178,7 @@ regardless of your laptop.
 ### Deploy with Helm
 
 Resolve the ImageStream to get the internal registry path, then install
-the chart. The `--set config.*` flags inject environment variables into
-the ConfigMap that gets mounted in the pod, overriding the
-`${VAR:-default}` placeholders in `agent.yaml` at runtime.
+the chart with your model values:
 
 ```bash
 IMAGE=$(oc get is calculus-agent -n calculus-agent --context="$CTX" \
@@ -157,29 +188,20 @@ helm install calculus-agent chart/ \
   --set image.repository=$IMAGE \
   --set image.tag=latest \
   --set image.pullPolicy=Always \
-  --set config.MODEL_ENDPOINT=$MODEL_ENDPOINT \
-  --set config.MODEL_NAME=$MODEL_NAME \
-  --set config.OPENAI_API_KEY=$OPENAI_API_KEY \
+  --set config.MODEL_ENDPOINT="<your-model-endpoint>" \
+  --set config.MODEL_NAME="<your-model-name>" \
+  --set config.OPENAI_API_KEY="<your-api-key-or-token>" \
   --set route.enabled=true \
   -n calculus-agent --kube-context="$CTX"
 ```
 
-`$MODEL_ENDPOINT`, `$MODEL_NAME`, and `$OPENAI_API_KEY` are the values you
-exported in the [Serve an LLM](guides/serve-an-llm.md) guide.
+Replace the `<placeholder>` values with the three values you found above.
 
-!!! tip "Endpoint URL for deployed agents"
-    When the agent runs on the cluster, it should use the **internal
-    service URL** (e.g. `https://...-predictor.<ns>.svc.cluster.local:8443/v1`
-    for catalog deploys, or `http://...-predictor.<ns>.svc.cluster.local:8000/v1`
-    for manual deploys). Update `MODEL_ENDPOINT` accordingly before running
-    `helm install`.
-
-- **`config.MODEL_ENDPOINT`** -- the `/v1` URL of your inference endpoint.
-- **`config.MODEL_NAME`** -- the model identifier your endpoint expects
-  (`redhataigpt-oss-20b` for catalog deploys, `RedHatAI/gpt-oss-20b` for
-  manual deploys).
-- **`config.OPENAI_API_KEY`** -- the service account token for catalog
-  deploys, or `not-required` for unauthenticated manual deploys.
+The `--set config.*` flags create a Kubernetes ConfigMap with these
+key-value pairs. When the pod starts, fipsagents reads `agent.yaml`,
+finds `${MODEL_ENDPOINT:-...}`, and substitutes the value from the
+ConfigMap. This is how configuration works in Kubernetes -- you never
+hardcode environment-specific values in the container image.
 
 The result is a Deployment, Service, ConfigMap, and Route.
 
@@ -265,12 +287,20 @@ finish: `oc rollout status deployment/calculus-agent -n calculus-agent --context
 rollout is stuck, check pod logs.
 
 **Model returns errors** -- if the health check passes but chat completions
-fail, the issue is usually the model endpoint. Verify the endpoint is reachable
-from inside the cluster:
+fail, the issue is usually the model endpoint. Verify the configured endpoint
+from inside the pod:
 
 ```bash
 oc exec deployment/calculus-agent -n calculus-agent --context="$CTX" -- \
-  curl -s http://vllm-predictor.model-ns.svc.cluster.local/v1/models
+  env | grep MODEL_ENDPOINT
+```
+
+Then check that the endpoint is reachable from the pod:
+
+```bash
+oc exec deployment/calculus-agent -n calculus-agent --context="$CTX" -- \
+  curl -sk "$(<the-endpoint-from-above>)/models" \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
 ```
 
 **Old image after rebuild** -- OpenShift caches images. After building a new

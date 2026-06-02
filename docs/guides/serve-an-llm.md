@@ -363,39 +363,27 @@ ServingRuntime and InferenceService configuration.
     !!! note "Reasoning content"
         gpt-oss-20b emits its chain-of-thought into a separate `reasoning_content` field on the response message. The visible `content` is the final answer only. If you ever see `content: null` with `finish_reason: "length"`, the response was truncated mid-reasoning — raise `max_tokens`.
 
-### Export the environment variables
+### Note your values
 
-Set these variables for the rest of the tutorial. The values depend on how
-you deployed the model.
+Before moving on, note these three values from your deployment. You'll use
+them in [Module 2](../02-configure-and-deploy.md) when deploying the agent
+to OpenShift.
 
 === "Catalog deploy"
 
-    For **local development** (running the agent on your laptop), use the
-    external route URL:
-
-    ```bash
-    export MODEL_ENDPOINT="https://redhataigpt-oss-20b-gpt-oss-model.apps.<your-cluster-domain>/v1"
-    export MODEL_NAME="redhataigpt-oss-20b"
-    export OPENAI_API_KEY="<token from dashboard>"
-    ```
-
-    For **deployed agents** on the cluster, use the internal service URL
-    in your Helm values or ConfigMap:
-
-    ```
-    MODEL_ENDPOINT=https://redhataigpt-oss-20b-predictor.gpt-oss-model.svc.cluster.local:8443/v1
-    ```
+    | Value | Where to find it |
+    |-------|-----------------|
+    | `MODEL_ENDPOINT` | RHOAI dashboard > your model > Inference endpoints > **Internal** URL, with `/v1` appended |
+    | `MODEL_NAME` | The model ID shown in the dashboard (e.g. `redhataigpt-oss-20b`) |
+    | `OPENAI_API_KEY` | The service account token shown under Inference endpoints |
 
 === "Manual deploy"
 
-    ```bash
-    export MODEL_ENDPOINT="http://gpt-oss-predictor.gpt-oss-model.svc.cluster.local:8000/v1"
-    export MODEL_NAME="RedHatAI/gpt-oss-20b"
-    export OPENAI_API_KEY="not-required"
-    ```
-
-    Adjust the host/port to match your cluster -- see the Headless service
-    warning in the manual deploy tab above.
+    | Value | Where to find it |
+    |-------|-----------------|
+    | `MODEL_ENDPOINT` | `http://<name>-predictor.<namespace>.svc.cluster.local:8000/v1` (see Headless warning above) |
+    | `MODEL_NAME` | The Hugging Face model ID (e.g. `RedHatAI/gpt-oss-20b`) |
+    | `OPENAI_API_KEY` | `not-required` (vLLM is unauthenticated by default) |
 
 You're ready for Module 1.
 
@@ -420,22 +408,23 @@ You need three things:
 | Model name | What that endpoint calls the model |
 | API key (if required) | Set as `OPENAI_API_KEY`. For unauthenticated endpoints, set it to any non-empty string (e.g. `not-required`) — the OpenAI SDK requires the variable to exist. |
 
-Smoke test before moving on:
+Smoke test before moving on (substitute your actual URL and key):
 
 ```bash
-curl -s "$MODEL_ENDPOINT/models" \
-  -H "Authorization: Bearer $OPENAI_API_KEY" | jq
+curl -s https://api.example.com/v1/models \
+  -H "Authorization: Bearer <your-api-key>" | jq
 ```
 
 If you get a list of models including the one you'll use, you're ready.
 
-Set the variables:
+Note these three values -- you'll use them in
+[Module 2](../02-configure-and-deploy.md) when deploying the agent:
 
-```bash
-export MODEL_ENDPOINT="https://your-endpoint.example.com/v1"
-export MODEL_NAME="your-model-id"
-export OPENAI_API_KEY="..."
-```
+| Value | What to use |
+|-------|-------------|
+| `MODEL_ENDPOINT` | Your provider's API URL ending with `/v1` |
+| `MODEL_NAME` | The model identifier your endpoint expects |
+| `OPENAI_API_KEY` | Your API key from the provider |
 
 The rest of the tutorial works identically — only the LLM lives elsewhere.
 
