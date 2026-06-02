@@ -33,7 +33,11 @@ gateway directly.
 
 ## Scaffold the gateway
 
+Navigate back to the parent directory (alongside `calculus-agent/` and
+`calculus-helper/`), then scaffold:
+
 ```bash
+cd ..
 fips-agents create gateway calculus-gateway
 cd calculus-gateway && ls
 ```
@@ -126,7 +130,10 @@ language.
 
 ## Scaffold the UI
 
+Navigate back to the parent directory, then scaffold:
+
 ```bash
+cd ..
 fips-agents create ui calculus-ui
 cd calculus-ui && ls
 ```
