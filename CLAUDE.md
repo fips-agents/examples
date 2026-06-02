@@ -6,12 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A **tutorial repository** that teaches building, deploying, and extending AI agents on OpenShift using the [fips-agents](https://github.com/fips-agents) toolkit (a scaffolding CLI plus composable templates — not a framework). It is _not_ application code — it is published documentation plus two completed worked examples.
 
-Four top-level concerns coexist here:
+Five top-level concerns coexist here:
 
 1. **MkDocs tutorial site** (`docs/`, `mkdocs.yml`) — published to https://fips-agents.github.io/examples/ via `.github/workflows/pages.yml` on every push to `main`.
-2. **`calculus-agent/`** — finished BaseAgent-based agent (the "Module 1–11" worked example). Has its own `CLAUDE.md` with BaseAgent-specific guidance.
-3. **`calculus-helper/`** — finished FastMCP v3 server providing 8 SymPy-powered calculus tools. Has its own `CLAUDE.md` with FastMCP-specific guidance.
-4. **`calculus-coordinator/`** — demo of the **subagent-as-tool** feature shipped in fipsagents 0.22.0 (agent-template PR #173). A tutor-role coordinator that delegates calculus computation to a registered peer agent (`calculus_specialist`, which in production points at the deployed `calculus-agent` route). Pins `fipsagents>=0.31.0` to match the tutorial baseline — it is a standalone demo, not part of the Module 1–11 sequence.
+2. **`manifests/platform/`** — YAML manifests for the Install OpenShift AI guide (NFD, GPU Operator, DSC, ClusterPolicy, HardwareProfile). Students clone the repo and apply these directly instead of manually creating files from inline code blocks.
+3. **`calculus-agent/`** — finished BaseAgent-based agent (the "Module 1–11" worked example). Has its own `CLAUDE.md` with BaseAgent-specific guidance.
+4. **`calculus-helper/`** — finished FastMCP v3 server providing 8 SymPy-powered calculus tools. Has its own `CLAUDE.md` with FastMCP-specific guidance.
+5. **`calculus-coordinator/`** — demo of the **subagent-as-tool** feature shipped in fipsagents 0.22.0 (agent-template PR #173). A tutor-role coordinator that delegates calculus computation to a registered peer agent (`calculus_specialist`, which in production points at the deployed `calculus-agent` route). Pins `fipsagents>=0.31.0` to match the tutorial baseline — it is a standalone demo, not part of the Module 1–11 sequence.
 
 When working inside `calculus-agent/`, `calculus-helper/`, or `calculus-coordinator/`, that sub-project's `CLAUDE.md` is authoritative — it covers the agent or MCP server's structure, decorators, deployment, and common mistakes. This top-level file is only for cross-cutting tutorial-repo work.
 

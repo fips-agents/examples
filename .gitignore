@@ -1,4 +1,7 @@
 site/
+build-pdf.py
+tutorial-*.pdf
+tutorial-print.html
 
 # Added by ggshield
 .cache_ggshield
