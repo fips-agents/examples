@@ -246,7 +246,16 @@ regardless of your laptop.
 ### Deploy with Helm
 
 Resolve the ImageStream to get the internal registry path, then install
-the chart with your model values:
+the chart with your model values. First, store your three values in shell
+variables so the Helm command can reference them:
+
+```bash
+MY_ENDPOINT="<your-internal-model-endpoint>/v1"
+MY_MODEL="<your-model-name>"
+MY_KEY="<your-api-key-or-token>"
+```
+
+Then install the chart:
 
 ```bash
 IMAGE=$(oc get is calculus-agent -n calculus-agent --context="$CTX" \
@@ -256,20 +265,27 @@ helm install calculus-agent chart/ \
   --set image.repository=$IMAGE \
   --set image.tag=latest \
   --set image.pullPolicy=Always \
-  --set config.MODEL_ENDPOINT="<your-model-endpoint>" \
-  --set config.MODEL_NAME="<your-model-name>" \
-  --set config.OPENAI_API_KEY="<your-api-key-or-token>" \
+  --set config.MODEL_ENDPOINT="$MY_ENDPOINT" \
+  --set config.MODEL_NAME="$MY_MODEL" \
+  --set config.OPENAI_API_KEY="$MY_KEY" \
+  --set config.SSL_CERT_FILE="/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt" \
   --set route.enabled=true \
   -n calculus-agent --kube-context="$CTX"
 ```
-
-Replace the `<placeholder>` values with the three values you found above.
 
 The `--set config.*` flags create a Kubernetes ConfigMap with these
 key-value pairs. When the pod starts, fipsagents reads `agent.yaml`,
 finds `${MODEL_ENDPOINT:-...}`, and substitutes the value from the
 ConfigMap. This is how configuration works in Kubernetes -- you never
 hardcode environment-specific values in the container image.
+
+!!! info "Why SSL_CERT_FILE?"
+    Models deployed from the RHOAI catalog are served over HTTPS using
+    OpenShift's internal service CA. The Python OpenAI SDK validates TLS
+    certificates, and the container's default CA bundle doesn't include
+    this CA. Setting `SSL_CERT_FILE` to the service CA certificate
+    (automatically mounted in every pod) tells Python to trust it. If
+    your model endpoint uses plain HTTP, this setting is harmless.
 
 The result is a Deployment, Service, ConfigMap, and Route.
 
