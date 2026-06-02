@@ -26,10 +26,13 @@ the Hugging Face model ID or `/mnt/models` if the model is loaded from a local
 path.
 
 !!! tip "Finding your model endpoint"
-    If your model is deployed via OpenShift AI (RHOAI), the internal service URL
-    follows the pattern:
+    **Catalog deploy**: Open the RHOAI dashboard, click on your deployed
+    model, and look under **Inference endpoints**. Use the **external URL**
+    for local development and the **internal URL** for deployed agents.
 
-        http://<inference-service-name>-predictor.<namespace>.svc.cluster.local/v1
+    **Manual deploy**: The internal service URL follows the pattern:
+
+        http://<inference-service-name>-predictor.<namespace>.svc.cluster.local:8000/v1
 
     List all InferenceServices across namespaces to find yours:
 
@@ -37,9 +40,11 @@ path.
 
 !!! info "Why OPENAI_API_KEY?"
     The OpenAI Python SDK requires an API key even when calling unauthenticated
-    endpoints like vLLM. Set `OPENAI_API_KEY` to any non-empty string (e.g.
-    `not-required`) to satisfy the SDK. The agent's ConfigMap handles this for
-    you in the Helm deploy step below.
+    endpoints. If you deployed the model **manually** (unauthenticated vLLM),
+    set `OPENAI_API_KEY` to any non-empty string (e.g. `not-required`). If you
+    deployed **from the catalog**, use the service account token shown in the
+    RHOAI dashboard under the model's Inference endpoints section. The agent's
+    ConfigMap handles this for you in the Helm deploy step below.
 
 ## Set agent identity
 
@@ -140,7 +145,9 @@ regardless of your laptop.
 ### Deploy with Helm
 
 Resolve the ImageStream to get the internal registry path, then install
-the chart:
+the chart. The `--set config.*` flags inject environment variables into
+the ConfigMap that gets mounted in the pod, overriding the
+`${VAR:-default}` placeholders in `agent.yaml` at runtime.
 
 ```bash
 IMAGE=$(oc get is calculus-agent -n calculus-agent --context="$CTX" \
@@ -152,23 +159,27 @@ helm install calculus-agent chart/ \
   --set image.pullPolicy=Always \
   --set config.MODEL_ENDPOINT=$MODEL_ENDPOINT \
   --set config.MODEL_NAME=$MODEL_NAME \
-  --set config.OPENAI_API_KEY=not-required \
+  --set config.OPENAI_API_KEY=$OPENAI_API_KEY \
   --set route.enabled=true \
   -n calculus-agent --kube-context="$CTX"
 ```
 
-Replace `$MODEL_ENDPOINT` and `$MODEL_NAME` with the values from the
-"Set your model endpoint" section above.
+`$MODEL_ENDPOINT`, `$MODEL_NAME`, and `$OPENAI_API_KEY` are the values you
+exported in the [Serve an LLM](guides/serve-an-llm.md) guide.
 
-The `--set config.*` flags inject environment variables into the
-ConfigMap that gets mounted in the pod. These override the
-`${VAR:-default}` placeholders in `agent.yaml` at runtime:
+!!! tip "Endpoint URL for deployed agents"
+    When the agent runs on the cluster, it should use the **internal
+    service URL** (e.g. `https://...-predictor.<ns>.svc.cluster.local:8443/v1`
+    for catalog deploys, or `http://...-predictor.<ns>.svc.cluster.local:8000/v1`
+    for manual deploys). Update `MODEL_ENDPOINT` accordingly before running
+    `helm install`.
 
-- **`config.MODEL_ENDPOINT`** — the `/v1` URL of your vLLM or
-  LlamaStack inference endpoint.
-- **`config.MODEL_NAME`** — the model identifier your endpoint expects.
-- **`config.OPENAI_API_KEY`** — satisfies the SDK requirement. Set to a
-  real key only if your endpoint requires authentication.
+- **`config.MODEL_ENDPOINT`** -- the `/v1` URL of your inference endpoint.
+- **`config.MODEL_NAME`** -- the model identifier your endpoint expects
+  (`redhataigpt-oss-20b` for catalog deploys, `RedHatAI/gpt-oss-20b` for
+  manual deploys).
+- **`config.OPENAI_API_KEY`** -- the service account token for catalog
+  deploys, or `not-required` for unauthenticated manual deploys.
 
 The result is a Deployment, Service, ConfigMap, and Route.
 

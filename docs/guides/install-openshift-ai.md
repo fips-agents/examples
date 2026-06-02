@@ -438,6 +438,18 @@ oc get dsc default-dsc --context="$CTX" -o jsonpath='{.status.phase}'
 
 The output should show `Ready`.
 
+!!! warning "DSC may show `False` in the READY column"
+    `oc get dsc` may display `READY: False` even when the cluster is
+    fully operational. This happens because the summary column reflects
+    removed components. Check the actual readiness with:
+
+    ```bash
+    oc get dsc default-dsc --context="$CTX" \
+      -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+    ```
+
+    If this prints `True`, your cluster is healthy.
+
 The Dashboard hostname should also resolve. RHOAI 3.x exposes the
 dashboard via Gateway API (not a plain `Route` in `redhat-ods-applications`):
 

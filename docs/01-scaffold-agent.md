@@ -93,6 +93,28 @@ sidecar instead.
     development, staging, and production -- you only override what differs
     via ConfigMaps or Secrets in OpenShift.
 
+### Configure your model
+
+The scaffold defaults point at a LlamaStack endpoint that won't exist on
+your cluster. Before running the agent, set the environment variables that
+the `${VAR:-default}` placeholders will pick up. These are the values you
+exported in the [Serve an LLM](guides/serve-an-llm.md) guide:
+
+```bash
+export MODEL_ENDPOINT="..."
+export MODEL_NAME="..."
+export OPENAI_API_KEY="..."
+```
+
+If you haven't deployed a model yet, complete the
+[Serve an LLM](guides/serve-an-llm.md) guide first.
+
+!!! tip "Local development endpoint"
+    When running the agent on your laptop, use the **external route URL**
+    for the model endpoint (the `apps.<cluster-domain>` URL). The internal
+    service URL (`svc.cluster.local`) is only reachable from inside the
+    cluster and is used when the agent is deployed to OpenShift.
+
 ### MCP servers
 
 ```yaml
@@ -367,8 +389,9 @@ curl localhost:8080/v1/agent-info | python -m json.tool
 }
 ```
 
-The `model.name` value reflects whatever you configured in `agent.yaml`; the
-scaffold default is shown here.
+The `model.name` value reflects your `MODEL_NAME` environment variable. If you
+set it in the previous section, you'll see your model name here instead of the
+scaffold default.
 
 The `tools` array lists every tool registered with `llm_only` or `both`
 visibility. The two shown above are **stock tools** that BaseAgent always
@@ -388,6 +411,6 @@ Stop the server with `Ctrl+C`.
 
 ## What's next
 
-The scaffolded project runs but is still generic. In
-[Module 2](02-configure-and-deploy.md), you'll customize the configuration,
-point it at a real LLM on your OpenShift cluster, and deploy it.
+The scaffolded project runs and is connected to your LLM. In
+[Module 2](02-configure-and-deploy.md), you'll customize the agent identity
+and deploy it to OpenShift.
