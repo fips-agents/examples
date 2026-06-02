@@ -45,16 +45,16 @@ platform.
 
     The dashboard may show the model as `RedHatAI/gpt-oss-20b`, but
     that's not necessarily what the inference server calls it. Query the
-    endpoint to find the exact model ID:
+    endpoint to find the exact model ID and store it in a variable:
 
     ```bash
-    curl -sk "$ENDPOINT/v1/models" \
-      -H "Authorization: Bearer $TOKEN" | jq '.data[].id'
+    MODEL=$(curl -sk "$ENDPOINT/v1/models" \
+      -H "Authorization: Bearer $TOKEN" | jq -r '.data[0].id')
+    echo "$MODEL"
     ```
 
     This prints the model ID the server expects -- typically a slug like
-    `redhataigpt-oss-20b` (without slashes). Use this exact value as
-    your `MODEL_NAME`.
+    `redhataigpt-oss-20b` (without slashes).
 
     ### 3. Smoke test
 
@@ -65,11 +65,17 @@ platform.
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer $TOKEN" \
       -d '{
-        "model": "<model-id-from-step-2>",
+        "model": "'"$MODEL"'",
         "messages": [{"role": "user", "content": "Say hello in one sentence."}],
-        "max_tokens": 100
-      }' | jq '.choices[0].message.content'
+        "max_tokens": 1000
+      }' | jq '.choices[0].message'
     ```
+
+    !!! note "Reasoning models"
+        gpt-oss-20b is a reasoning model -- it puts its chain-of-thought
+        in a `reasoning_content` field and the final answer in `content`.
+        If `content` is `null`, the response was truncated mid-reasoning.
+        Increase `max_tokens`.
 
     ### 4. Note your values
 
