@@ -12,24 +12,80 @@ depends on how the model was deployed. This is a practical exercise in
 navigating OpenShift -- a skill you'll use throughout your work with the
 platform.
 
-### MODEL_ENDPOINT
-
-The URL where your model is listening for OpenAI-compatible API requests.
-
 === "Catalog deploy (RHOAI dashboard)"
+
+    ### 1. Find the endpoint and token
 
     1. Open the RHOAI dashboard
     2. Navigate to **Models > Deployed models**
     3. Click on your deployed model
-    4. Under **Inference endpoints**, find the **Internal** URL
-    5. Append `/v1` to get the full endpoint, for example:
+    4. Under **Inference endpoints**, you'll see two sections:
 
-            https://redhataigpt-oss-20b-predictor.gpt-oss-model.svc.cluster.local:8443/v1
+    **REST endpoints:**
+
+    - **Internal** -- accessible only from inside the cluster (e.g.
+      `https://redhataigpt-oss-20b-predictor.gpt-oss-model.svc.cluster.local:8443`).
+      This is the URL your deployed agent will use.
+    - **External** -- accessible from anywhere (e.g.
+      `https://redhataigpt-oss-20b-gpt-oss-model.apps.<cluster-domain>`).
+      Use this for smoke tests from your laptop.
+
+    **Token:** Below the endpoints, you'll see a service account token.
+    Copy it -- this is your `OPENAI_API_KEY`.
+
+    Store the external endpoint and token in shell variables so you can
+    use them in the next step:
+
+    ```bash
+    ENDPOINT="https://redhataigpt-oss-20b-gpt-oss-model.apps.<your-cluster-domain>"
+    TOKEN="<paste-your-token-here>"
+    ```
+
+    ### 2. Discover the model name
+
+    The dashboard may show the model as `RedHatAI/gpt-oss-20b`, but
+    that's not necessarily what the inference server calls it. Query the
+    endpoint to find the exact model ID:
+
+    ```bash
+    curl -sk "$ENDPOINT/v1/models" \
+      -H "Authorization: Bearer $TOKEN" | jq '.data[].id'
+    ```
+
+    This prints the model ID the server expects -- typically a slug like
+    `redhataigpt-oss-20b` (without slashes). Use this exact value as
+    your `MODEL_NAME`.
+
+    ### 3. Smoke test
+
+    Verify the model responds:
+
+    ```bash
+    curl -sk "$ENDPOINT/v1/chat/completions" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $TOKEN" \
+      -d '{
+        "model": "<model-id-from-step-2>",
+        "messages": [{"role": "user", "content": "Say hello in one sentence."}],
+        "max_tokens": 100
+      }' | jq '.choices[0].message.content'
+    ```
+
+    ### 4. Note your values
+
+    You now have all three values for the Helm deploy step below:
+
+    | Value | What you found |
+    |-------|---------------|
+    | `MODEL_ENDPOINT` | The **Internal** URL with `/v1` appended (e.g. `https://redhataigpt-oss-20b-predictor.gpt-oss-model.svc.cluster.local:8443/v1`) |
+    | `MODEL_NAME` | The model ID from the `/v1/models` query |
+    | `OPENAI_API_KEY` | The service account token |
 
 === "Manual deploy (CLI)"
 
-    Find the InferenceService and construct the URL from its name and
-    namespace:
+    ### 1. Find the endpoint
+
+    List InferenceServices to find your model's name and namespace:
 
     ```bash
     oc get inferenceservice -A --context="$CTX"
@@ -45,39 +101,45 @@ The URL where your model is listening for OpenAI-compatible API requests.
         `.status.url` omits it. See the
         [Serve an LLM](guides/serve-an-llm.md) guide for details.
 
+    ### 2. Discover the model name
+
+    Port-forward to the model and query it:
+
+    ```bash
+    oc port-forward --context="$CTX" -n gpt-oss-model deployment/gpt-oss-predictor 18000:8000 &
+    curl -s http://localhost:18000/v1/models | jq '.data[].id'
+    kill %1
+    ```
+
+    This prints the exact model ID the server expects (e.g.
+    `RedHatAI/gpt-oss-20b`).
+
+    ### 3. Note your values
+
+    | Value | What you found |
+    |-------|---------------|
+    | `MODEL_ENDPOINT` | The internal service URL with `/v1` (e.g. `http://gpt-oss-predictor.gpt-oss-model.svc.cluster.local:8000/v1`) |
+    | `MODEL_NAME` | The model ID from the `/v1/models` query |
+    | `OPENAI_API_KEY` | `not-required` (vLLM is unauthenticated by default) |
+
 === "Instructor-provided or external"
 
-    Your instructor or provider will give you the endpoint URL. It should
-    end with `/v1` (e.g. `https://api.example.com/v1`).
+    Your instructor or provider will give you the endpoint URL, model
+    name, and API key. The URL should end with `/v1`.
 
-### MODEL_NAME
+    If you have the endpoint and a key but aren't sure of the model name,
+    query it:
 
-The model identifier that the inference server expects.
+    ```bash
+    curl -s <your-endpoint>/models \
+      -H "Authorization: Bearer <your-key>" | jq '.data[].id'
+    ```
 
-- **Catalog deploy**: Click your model in the RHOAI dashboard. The name
-  shown is the model ID -- typically a slug like `redhataigpt-oss-20b`
-  (not the Hugging Face path). You can also query it:
-
-        curl -sk <your-endpoint>/models -H "Authorization: Bearer <token>" | jq '.data[].id'
-
-- **Manual deploy**: Usually the Hugging Face model ID, e.g.
-  `RedHatAI/gpt-oss-20b`.
-- **External**: Whatever your provider calls the model.
-
-### OPENAI_API_KEY
-
-An authentication token for the model endpoint.
-
-- **Catalog deploy**: Find the service account token in the RHOAI
-  dashboard under your model's **Inference endpoints** section.
-- **Manual deploy**: vLLM doesn't require authentication by default.
-  Set this to `not-required` -- the OpenAI Python SDK requires a
-  non-empty value even for unauthenticated endpoints.
-- **External**: Your API key from the provider.
-
----
-
-Note these three values -- you'll use them in the Helm deploy step below.
+    | Value | What you found |
+    |-------|---------------|
+    | `MODEL_ENDPOINT` | The URL your instructor or provider gave you |
+    | `MODEL_NAME` | The model ID from the `/v1/models` query |
+    | `OPENAI_API_KEY` | The API key from your instructor or provider |
 
 ## Set agent identity
 
