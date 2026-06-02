@@ -3,17 +3,25 @@
 Your agent has two calculus tools, a code sandbox, and a chat UI. It works,
 but it only covers integration and differentiation. The full calculus-helper
 MCP server has eight tools. You could write the remaining six by hand, but
-there's a faster way: use Claude Code's slash commands to plan, generate,
-test, and deploy new tools in minutes. In this module you'll walk through
-that workflow and learn how to extend the agent side with skills.
+there's a faster way: use slash commands in your AI coding assistant to
+plan, generate, test, and deploy new tools in minutes. In this module
+you'll walk through that workflow and learn how to extend the agent side
+with skills.
 
 ## The slash command workflow
 
-Claude Code supports **slash commands** -- reusable instructions stored as
-Markdown files in `.claude/commands/`. When you type `/plan-tools` in Claude
-Code, it reads the corresponding Markdown file and executes the instructions
-inside it. There's nothing magic about them: they're just prompt templates
-that encode a development workflow.
+Claude Code and compatible AI coding assistants (such as
+[OpenCode](https://github.com/opencode-ai/opencode)) support **slash
+commands** -- reusable instructions stored as Markdown files in
+`.claude/commands/`. When you type `/plan-tools`, the assistant reads the
+corresponding Markdown file and executes the instructions inside it.
+There's nothing magic about them: they're just prompt templates that
+encode a development workflow.
+
+!!! info "Compatibility"
+    Any AI coding assistant that reads `.claude/commands/` Markdown files
+    as slash commands will work for this module. The instructions below
+    use "your assistant" to refer to whichever tool you're using.
 
 The MCP server template ships with four commands that form a pipeline:
 
@@ -36,7 +44,8 @@ The template also ships secondary commands (`/implement-mcp-item`,
 
 ## Plan new tools
 
-Open Claude Code in the `calculus-helper` directory and run:
+Open Claude Code (or your AI coding assistant) in the `calculus-helper`
+directory and run:
 
 ```bash
 /plan-tools
@@ -44,13 +53,13 @@ Open Claude Code in the `calculus-helper` directory and run:
 
 !!! warning "Run this from inside `calculus-helper/`, not `calculus-agent/`"
     These slash commands ship in `calculus-helper/.claude/commands/` and only
-    exist when Claude Code is launched with `calculus-helper/` as its working
-    directory. If you run `/plan-tools` from `calculus-agent/`, Claude Code
-    will report "command not found" or, worse, scaffold a tool into the wrong
-    project. If the command isn't recognized, double-check `pwd` and confirm
-    `.claude/commands/plan-tools.md` exists in the current directory --
-    fips-agents-scaffolded MCP servers ship with these commands, but a
-    hand-rolled clone won't.
+    exist when your assistant is launched with `calculus-helper/` as its
+    working directory. If you run `/plan-tools` from `calculus-agent/`, your
+    assistant will report "command not found" or, worse, scaffold a tool
+    into the wrong project. If the command isn't recognized, double-check
+    `pwd` and confirm `.claude/commands/plan-tools.md` exists in the current
+    directory -- fips-agents-scaffolded MCP servers ship with these commands,
+    but a hand-rolled clone won't.
 
 The command does three things:
 
@@ -58,7 +67,7 @@ The command does three things:
 2. Reads your project's existing code and documentation for context
 3. Creates `TOOLS_PLAN.md` with detailed specifications for each tool
 
-You'll have a conversation with Claude Code about what tools to add. For the
+You'll have a conversation with your assistant about what tools to add. For the
 calculus-helper, the six new tools are:
 
 - **evaluate_limit** -- limits at a point or infinity, one-sided or two-sided
@@ -251,7 +260,7 @@ cd ../calculus-agent
 /add-skill
 ```
 
-Claude Code will ask what the skill does. For example, a "summarize" skill
+Your assistant will ask what the skill does. For example, a "summarize" skill
 that condenses long outputs into executive briefs. The command creates a
 directory under `skills/` with a `SKILL.md` file:
 
@@ -282,7 +291,7 @@ context cost of the full instructions until the skill is activated.
 
 ## How slash commands work
 
-The commands used in this module are not built into Claude Code. They're
+The commands used in this module are not built into any specific tool. They're
 Markdown files in `.claude/commands/`:
 
 ```
@@ -295,12 +304,12 @@ calculus-helper/.claude/commands/
 
 Each file has YAML frontmatter with a `description` field and a Markdown
 body with step-by-step instructions. For example, `plan-tools.md` tells
-Claude Code to read Anthropic's tool design article, examine the project
+the assistant to read Anthropic's tool design article, examine the project
 context, create `TOOLS_PLAN.md`, and present the plan for review. The body
 is explicit about what to do and what not to do ("this is a discussion and
 planning phase only -- do NOT implement any code").
 
-When you type `/plan-tools`, Claude Code reads this file and follows its
+When you type `/plan-tools`, your assistant reads this file and follows its
 instructions. That's all there is to it. You can create your own slash
 commands for any repeatable workflow: code review checklists, migration
 playbooks, documentation generators, release procedures.
@@ -319,10 +328,10 @@ commands, making them reproducible and sharable across teams.
 
 ## The meta point
 
-Step back and notice what happened in this module. You used an AI tool
-(Claude Code) to accelerate the development of AI tools (MCP server tools)
+Step back and notice what happened in this module. You used an AI coding
+assistant to accelerate the development of AI tools (MCP server tools)
 that are consumed by an AI agent. The slash commands encode human expertise
-about tool design into reusable instructions that Claude Code executes
+about tool design into reusable instructions that the assistant executes
 consistently.
 
 This is the leverage: instead of writing each tool from scratch, you wrote a
