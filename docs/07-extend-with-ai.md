@@ -44,6 +44,13 @@ The template also ships secondary commands (`/implement-mcp-item`,
 
 ## Plan new tools
 
+!!! info "Interactive assistant session"
+    The `/plan-tools`, `/create-tools`, `/exercise-tools`, and `/add-skill`
+    commands run inside your AI coding assistant — not in the terminal.
+    Start a session in the appropriate project directory and type the
+    command at the assistant's prompt. The assistant will guide you through
+    each step interactively.
+
 Open Claude Code (or your AI coding assistant) in the `calculus-helper`
 directory and run:
 
@@ -148,8 +155,8 @@ critical points by differentiating, then solve the resulting equation, then
 evaluate the original function at those points.
 
 The command generates eval cases in `evals/evals.yaml` that capture these
-scenarios. You can re-run them later with `make eval` from the agent project
-(`calculus-agent/`) as a regression suite.
+scenarios. The eval cases can be re-run later as a regression suite — see the
+`evals/` directory in your agent project for details.
 
 !!! warning "Ergonomic issues found here are cheap to fix"
     A confusing parameter name caught during exercise costs minutes to rename.
@@ -166,23 +173,21 @@ scenarios. You can re-run them later with `make eval` from the agent project
     export CTX=$(oc config current-context)
     ```
 
-With all eight tools passing tests and exercised for ergonomics, deploy:
+With all eight tools passing tests and exercised for ergonomics, deploy
+the updated MCP server:
 
 ```bash
-fips-agents deploy --context="$CTX" -n calculus-mcp
+./deploy.sh calculus-mcp
 ```
 
-You can also use the Makefile wrapper:
+Or equivalently:
 
 ```bash
 make deploy PROJECT=calculus-mcp
 ```
 
-Or the standalone deploy script:
-
-```bash
-./deploy.sh calculus-mcp
-```
+Both commands apply `openshift.yaml`, upload source, build the container,
+and wait for the rollout.
 
 The deployment rebuilds the container image and rolls out the new pod. The
 agent discovers the new tools automatically at its next restart -- **no
@@ -196,22 +201,39 @@ Restart the agent to trigger discovery:
 oc rollout restart deployment/calculus-agent -n calculus-agent --context="$CTX"
 ```
 
-Verify the agent sees all eight tools:
+Verify the agent sees all eleven tools:
 
 ```bash
 ROUTE=$(oc get route calculus-agent -n calculus-agent --context="$CTX" -o jsonpath='{.spec.host}')
+echo "$ROUTE"
+```
+
+```bash
 curl -sk "https://$ROUTE/v1/agent-info" | python -m json.tool
 ```
 
+You should see all eleven tools in the `tools` array (truncated for brevity):
+
 ```json
 {
-    "name": "calculus-agent",
-    "version": "0.1.0",
+    "agent": {
+        "name": "calculus-agent",
+        "description": "...",
+        "version": "0.1.0"
+    },
+    "model": { "..." },
     "tools": [
-        "integrate", "differentiate", "evaluate_limit",
-        "taylor_series", "solve_equation", "solve_ode",
-        "simplify_expression", "evaluate_numeric", "code_executor",
-        "ask_user", "spawn_agent"
+        {"name": "integrate", "description": "..."},
+        {"name": "differentiate", "description": "..."},
+        {"name": "evaluate_limit", "description": "..."},
+        {"name": "taylor_series", "description": "..."},
+        {"name": "solve_equation", "description": "..."},
+        {"name": "solve_ode", "description": "..."},
+        {"name": "simplify_expression", "description": "..."},
+        {"name": "evaluate_numeric", "description": "..."},
+        {"name": "code_executor", "description": "..."},
+        {"name": "ask_user", "description": "..."},
+        {"name": "spawn_agent", "description": "..."}
     ]
 }
 ```
@@ -239,6 +261,11 @@ The key additions to the `## Instructions` section:
 5. Use `evaluate_numeric` or the code sandbox for decimal follow-up,
    not as a replacement for symbolic tools.
 ```
+
+See the reference agent at `calculus-agent/prompts/system.md` in this
+repository for the full system prompt with all eight tools described.
+The key principle: describe what each tool category is **for**, not how
+to call it -- the injected schemas handle the calling convention.
 
 !!! info "The prompt describes capabilities, not schemas"
     BaseAgent injects tool schemas into the system message at runtime.
