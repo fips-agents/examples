@@ -74,11 +74,24 @@ The build takes 2–3 minutes and pushes
 `image-registry.openshift-image-registry.svc:5000/calculus-agent/code-sandbox:latest`
 to the cluster's internal registry.
 
-## Enable the sandbox in your Helm chart
+## Wire the sandbox to the agent
 
-The sandbox is configured as an optional sidecar in the agent's Helm chart.
-Open `chart/values.yaml` and add the `sandbox` section, pointing
-`image.repository` at the image stream you just built:
+Connecting the sandbox requires **two separate changes** -- one to deploy
+the sandbox container, and one to give the agent a tool that calls it:
+
+1. **Helm chart** (`chart/values.yaml`) — adds the sandbox as a sidecar
+   container in the agent pod and sets `SANDBOX_URL` in the ConfigMap.
+2. **Tool file** (`tools/code_executor.py`) — registers a local tool
+   that POSTs code to the sandbox and returns the output.
+
+Both are required. Without the Helm change, there's no sandbox to call.
+Without the tool file, the agent doesn't know the sandbox exists.
+
+### Step 1: Add the sandbox sidecar to the Helm chart
+
+Open `chart/values.yaml` in the **calculus-agent** project and add the
+`sandbox` section, pointing `image.repository` at the image stream you
+just built:
 
 ```yaml
 sandbox:
@@ -135,10 +148,11 @@ calculus-agent-7b4f9d8c6-x2k1p   2/2     Running   0          30s
 The `2/2` in the READY column confirms both the agent and the sandbox sidecar
 are running.
 
-## Add the code_executor tool
+### Step 2: Add the code_executor tool
 
-Create `tools/code_executor.py` in your agent project. This is a **local tool**
-(not an MCP tool) that POSTs code to the sandbox and returns the output.
+Create `tools/code_executor.py` in your agent project (make sure you're
+in `calculus-agent/`). This is a **local tool** (not an MCP tool) that
+POSTs code to the sandbox and returns the output.
 
 ```python
 import os
