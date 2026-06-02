@@ -85,6 +85,23 @@ Before writing tools, create `src/calc.py` -- a shared module for expression
 parsing and result formatting. It lives outside `src/tools/` so the
 auto-discovery scanner doesn't try to find tool decorators in it.
 
+Create the file:
+
+```bash
+touch src/calc.py
+```
+
+The sections below walk through the key pieces of `calc.py`. If you prefer
+to skip the incremental build, copy the complete file from the finished
+example in the repo:
+
+```bash
+cp ../../examples/calculus-helper/src/calc.py src/calc.py
+```
+
+If you cloned the repo to a different location, the file is at
+[`calculus-helper/src/calc.py`](https://github.com/fips-agents/examples/blob/main/calculus-helper/src/calc.py).
+
 ### The safe namespace
 
 The core idea is an **allowlist** of names available inside parsed expressions.
