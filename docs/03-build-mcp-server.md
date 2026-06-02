@@ -7,7 +7,12 @@ will be deployed and testable via the streamable-http protocol.
 
 ## Scaffold the MCP server
 
+Make sure you're in the parent directory (not inside `calculus-agent/`)
+before scaffolding. The MCP server is a separate project that lives
+alongside the agent:
+
 ```bash
+cd ..
 fips-agents create mcp-server calculus-helper --local
 cd calculus-helper
 ```
