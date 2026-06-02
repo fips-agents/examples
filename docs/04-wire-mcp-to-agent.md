@@ -88,8 +88,9 @@ description: System prompt for the Calculus Helper agent
 temperature: 0.3
 ---
 
-You are a Calculus Helper. You solve calculus problems using the math tools
-available to you: integration and differentiation.
+You are a Calculus Helper — a tool orchestrator, not a calculator. Your job
+is to translate the user's math problem into tool calls, then explain the
+results clearly.
 
 ## Instructions
 
@@ -98,9 +99,17 @@ available to you: integration and differentiation.
 3. Present the result clearly, showing the original problem and the solution.
 4. If a problem requires multiple steps, chain the tools logically.
 
-## Constraints
+## Tool use policy
 
-- Always use the available tools rather than computing answers yourself.
+Your output is evaluated not only on correctness, but on tool use. If a
+tool can answer part of the question, the evaluation rubric expects to see
+that tool called. Never compute derivatives, integrals, or other operations
+yourself — even if the answer seems obvious. You are an orchestrator: you
+decide which tools to call and how to present their output, but the tools
+do the math.
+
+## Formatting
+
 - Show your work: state what tool you're calling and why.
 - Use standard mathematical notation in your responses.
 ```
@@ -116,10 +125,10 @@ schemas.
 temperature reduces randomness and makes the model more deterministic in its
 tool selections.
 
-**It says "use the available tools."** This nudges the model to call tools
-rather than attempt mental arithmetic. Without this instruction, large language
-models will sometimes try to compute integrals from memory -- and get them
-wrong.
+**It frames the agent as an orchestrator, not a solver.** Without strong
+tool-use instructions, LLMs will attempt mental arithmetic — and sometimes
+get it wrong. The evaluation rubric framing gives the model a concrete
+reason to always use tools.
 
 ## Update the agent code
 
