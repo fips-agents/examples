@@ -23,11 +23,10 @@ FIPS-validated algorithms. No application-level configuration is needed.
     your terminal session so every command targets the right cluster:
 
     ```bash
-    export CTX=my-cluster-context
-    export NS=calculus-agent
+    export CTX=$(oc config current-context)
     ```
 
-    Every `oc` and `helm` command in this module uses `$CTX` and `$NS`.
+    Every `oc` and `helm` command in this module uses `$CTX`.
 
 To verify FIPS mode is active in a running pod, first confirm the pod is up:
 
@@ -89,6 +88,8 @@ env:
         key: OPENAI_API_KEY
 ```
 
+Edit `chart/values.yaml` and add the block above, then run the upgrade:
+
 Make sure you're in the `calculus-agent/` directory so `chart/` resolves
 correctly:
 
@@ -132,17 +133,13 @@ oc create secret generic mcp-auth \
   --context="$CTX" -n calculus-agent
 ```
 
-Then add the env vars to the MCP server's Helm values:
+Add the env vars to the MCP server's `openshift.yaml` deployment spec, or set them directly:
 
-```yaml
-env:
-  - name: MCP_AUTH_JWT_ALG
-    value: HS256
-  - name: MCP_AUTH_JWT_SECRET
-    valueFrom:
-      secretKeyRef:
-        name: mcp-auth
-        key: MCP_AUTH_JWT_SECRET
+```bash
+oc set env deployment/mcp-server \
+  MCP_AUTH_JWT_ALG=HS256 \
+  --from=secret/mcp-auth \
+  --context="$CTX" -n calculus-mcp
 ```
 
 ### Configure the agent for authenticated MCP
@@ -156,6 +153,12 @@ mcp_servers:
     auth:
       token: ${MCP_AUTH_TOKEN}
 ```
+
+!!! note
+    The `auth.token` field requires fipsagents v0.28.0 or later. If your
+    agent version doesn't support it, pass the token via the
+    `MCP_AUTH_TOKEN` environment variable instead -- the MCP client reads
+    it automatically.
 
 Store the token in a Secret and inject it the same way as `OPENAI_API_KEY`.
 
@@ -251,7 +254,7 @@ spec:
           averageUtilization: 70
 ```
 
-Save the YAML above to `hpa.yaml`, then apply it:
+Save the YAML above to `hpa.yaml` (in your current directory), then apply it:
 
 ```bash
 oc apply -f hpa.yaml --context="$CTX" -n calculus-agent
@@ -318,7 +321,7 @@ this in Module 5, annotate the agent's Route:
 ```bash
 oc annotate route calculus-gateway \
   haproxy.router.openshift.io/timeout=120s \
-  --context="$CTX" -n calculus-agent --overwrite
+  --context="$CTX" -n calculus-gateway --overwrite
 ```
 
 Do the same for the agent Route if it is also directly exposed. The UI Route
@@ -350,10 +353,10 @@ server:
 Override via Helm:
 
 ```bash
-helm upgrade my-agent chart/ \
+helm upgrade calculus-agent chart/ \
   --set config.STORAGE_BACKEND=sqlite \
   --set config.SESSIONS_ENABLED=true \
-  --kube-context="$CTX"
+  --kube-context="$CTX" -n calculus-agent
 ```
 
 The server exposes `POST /v1/sessions`, `GET /v1/sessions/{id}`, and
@@ -396,11 +399,11 @@ ServiceMonitor.
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: my-agent-metrics
+  name: calculus-agent-metrics
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: my-agent
+      app.kubernetes.io/name: calculus-agent
   endpoints:
     - port: http
       path: /metrics
@@ -436,7 +439,7 @@ server:
     enabled: true
     exporter: otel
     otel_endpoint: http://otel-collector:4317
-    service_name: my-agent
+    service_name: calculus-agent
 ```
 
 Requires the `[otel]` extra: `pip install fipsagents[otel]`.
@@ -474,11 +477,11 @@ server:
 Override via Helm or env vars:
 
 ```bash
-helm upgrade my-agent chart/ \
+helm upgrade calculus-agent chart/ \
   --set config.STORAGE_BACKEND=sqlite \
   --set config.TRACES_ENABLED=true \
   --set config.FEEDBACK_ENABLED=true \
-  --kube-context="$CTX"
+  --kube-context="$CTX" -n calculus-agent
 ```
 
 #### REST endpoints
@@ -492,10 +495,16 @@ The server exposes four feedback endpoints:
 | `/v1/feedback/{feedback_id}` | PATCH | Edit an existing record in place — change the rating, revise the comment |
 | `/v1/feedback/stats` | GET | Aggregated counts grouped by time window (`hour` / `day` / `week`) |
 
+Grab the agent's route URL so curl commands work from your workstation:
+
+```bash
+AGENT_ROUTE=$(oc get route calculus-agent --context="$CTX" -n calculus-agent -o jsonpath='{.spec.host}')
+```
+
 A minimal POST looks like this:
 
 ```bash
-curl -X POST http://my-agent:8080/v1/feedback \
+curl -X POST https://$AGENT_ROUTE/v1/feedback \
   -H 'Content-Type: application/json' \
   -d '{"trace_id":"trace_abc123","rating":1,"comment":"clear explanation"}'
 ```
@@ -513,7 +522,7 @@ fields stay as they were.
 Capture the `feedback_id` from the original POST response, then update it:
 
 ```bash
-curl -X PATCH http://my-agent:8080/v1/feedback/fb_abc123 \
+curl -X PATCH https://$AGENT_ROUTE/v1/feedback/fb_abc123 \
   -H 'Content-Type: application/json' \
   -d '{"rating":-1,"comment":"on second look, this was wrong"}'
 ```
@@ -550,13 +559,13 @@ queries.
 List the most recent records for a session:
 
 ```bash
-curl 'http://my-agent:8080/v1/feedback?session_id=demo-1&limit=20' | jq
+curl "https://$AGENT_ROUTE/v1/feedback?session_id=demo-1&limit=20" | jq
 ```
 
 Get aggregated stats for the last 7 days, bucketed by day:
 
 ```bash
-curl 'http://my-agent:8080/v1/feedback/stats?window=day&since=2026-04-19T00:00:00Z' | jq
+curl "https://$AGENT_ROUTE/v1/feedback/stats?window=day&since=2026-04-19T00:00:00Z" | jq
 ```
 
 Each stats row contains `window_start`, `window_end`, `agent_type`,
@@ -573,7 +582,12 @@ Enable feedback on the calculus agent with sqlite storage:
 2. Add `fipsagents[feedback]` to the `dependencies` list in
    `pyproject.toml` (or run `pip install 'fipsagents[feedback]'` in your
    venv).
-3. Redeploy: `make deploy PROJECT=calculus-agent`.
+3. Redeploy:
+
+    ```bash
+    oc start-build calculus-agent --from-dir=. --follow -n calculus-agent --context="$CTX"
+    oc rollout restart deployment/calculus-agent -n calculus-agent --context="$CTX"
+    ```
 4. Open the chat UI, run several conversations, click thumbs-up on good
    answers and thumbs-down (with a category) on bad ones.
 5. Query `/v1/feedback/stats?window=hour` to see your ratings aggregated.
