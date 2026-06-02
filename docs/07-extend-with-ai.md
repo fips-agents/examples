@@ -94,6 +94,11 @@ The command reads `TOOLS_PLAN.md` and works through each tool:
 3. Writes tests in `tests/`
 4. Runs `make test` and `make lint` to verify
 
+!!! note
+    `make test` and `make lint` are standard targets in the MCP server
+    Makefile. If either is missing, the slash command will skip that step
+    and report a warning.
+
 For six tools, this takes a few minutes. The command launches parallel
 subagents (one per tool) to implement them simultaneously, then aggregates
 the results and runs the full test suite.
@@ -144,17 +149,29 @@ scenarios. You can re-run them later with `make eval` from the agent project
 
 ## Deploy the updated MCP server
 
+!!! tip "Multi-cluster safety"
+    Every `oc` command in this module includes `--context="$CTX"`. Set it
+    once per shell session if you haven't already:
+
+    ```bash
+    export CTX=$(oc config current-context)
+    ```
+
 With all eight tools passing tests and exercised for ergonomics, deploy:
 
 ```bash
 fips-agents deploy --context="$CTX" -n calculus-mcp
 ```
 
-You can also use the Makefile wrapper or the standalone deploy script:
+You can also use the Makefile wrapper:
 
 ```bash
 make deploy PROJECT=calculus-mcp
-# or
+```
+
+Or the standalone deploy script:
+
+```bash
 ./deploy.sh calculus-mcp
 ```
 

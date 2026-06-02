@@ -18,6 +18,17 @@ Red Hat UBI base images are FIPS-capable out of the box. When the host kernel
 has `fips=1` set, UBI's OpenSSL automatically restricts itself to
 FIPS-validated algorithms. No application-level configuration is needed.
 
+!!! tip "Multi-cluster safety"
+    If you work with more than one cluster, pin the context at the top of
+    your terminal session so every command targets the right cluster:
+
+    ```bash
+    export CTX=my-cluster-context
+    export NS=calculus-agent
+    ```
+
+    Every `oc` and `helm` command in this module uses `$CTX` and `$NS`.
+
 To verify FIPS mode is active in a running pod, first confirm the pod is up:
 
 ```bash
@@ -67,7 +78,7 @@ oc create secret generic llm-credentials \
 ### Mount via Helm values
 
 The Helm chart's `env` section supports `secretKeyRef` for injecting Secret
-values as environment variables. Add this to your `values.yaml`:
+values as environment variables. Add this to `chart/values.yaml` in your agent project:
 
 ```yaml
 env:
@@ -78,7 +89,8 @@ env:
         key: OPENAI_API_KEY
 ```
 
-Then upgrade the release:
+Make sure you're in the `calculus-agent/` directory so `chart/` resolves
+correctly:
 
 ```bash
 helm upgrade calculus-agent chart/ --reuse-values --kube-context="$CTX" -n calculus-agent
@@ -239,8 +251,14 @@ spec:
           averageUtilization: 70
 ```
 
-Apply it with `oc apply -f hpa.yaml --context="$CTX" -n calculus-agent`. The same pattern works
-for the MCP server -- create a separate HPA targeting its Deployment.
+Save the YAML above to `hpa.yaml`, then apply it:
+
+```bash
+oc apply -f hpa.yaml --context="$CTX" -n calculus-agent
+```
+
+The same pattern works for the MCP server -- create a separate HPA
+targeting its Deployment.
 
 !!! warning "Apply HPA after your final Helm upgrade"
     The HPA takes ownership of `.spec.replicas` once applied. Any subsequent
@@ -366,7 +384,13 @@ Available metrics:
 | `agent_tokens_total` | counter | model, direction |
 
 To scrape metrics with OpenShift user-workload monitoring, create a
-ServiceMonitor:
+ServiceMonitor.
+
+!!! note "Prerequisite: user-workload monitoring"
+    The ServiceMonitor requires OpenShift's user-workload monitoring to
+    be enabled. See the
+    [OpenShift documentation](https://docs.openshift.com/container-platform/latest/observability/monitoring/enabling-monitoring-for-user-defined-projects.html)
+    if your cluster doesn't have it configured.
 
 ```yaml
 apiVersion: monitoring.coreos.com/v1
@@ -486,8 +510,9 @@ with the new fields rather than posting again -- the record updates in
 place, no duplicate row is created. PATCH bodies are partial: omitted
 fields stay as they were.
 
+Capture the `feedback_id` from the original POST response, then update it:
+
 ```bash
-# Capture the feedback_id from the original POST response, then:
 curl -X PATCH http://my-agent:8080/v1/feedback/fb_abc123 \
   -H 'Content-Type: application/json' \
   -d '{"rating":-1,"comment":"on second look, this was wrong"}'

@@ -191,8 +191,11 @@ helm install minio bitnami/minio \
   -n calculus-agent \
   --set auth.rootUser=agent --set auth.rootPassword='<from-secret>' \
   --set defaultBuckets=agent-files
+```
 
-# agent.yaml — point at the MinIO service:
+Then point the agent at the MinIO service in `agent.yaml`:
+
+```yaml
 files:
   bytes_backend:
     type: s3
@@ -392,7 +395,7 @@ Find the `pip install` line in the builder stage and change it:
 Without this change, `make build` produces an image without Docling or
 python-magic, and `/v1/files` will fail at runtime with an import error.
 
-Then install locally:
+Then install locally. Make sure you are in the `calculus-agent/` directory:
 
 ```bash
 cd calculus-agent
@@ -401,10 +404,11 @@ pip install -e '.[files]'
 
 **Step 2: Test the endpoint locally**
 
+Start the agent and wait for it to become healthy (backgrounding the
+process does not guarantee the HTTP port is open yet):
+
 ```bash
 make run-local &
-# Wait until the server is actually listening -- backgrounding doesn't
-# guarantee the HTTP port is open yet.
 until curl -sf http://localhost:8080/healthz >/dev/null 2>&1; do sleep 1; done
 echo "%PDF-1.4 stub" > /tmp/example.pdf
 curl -F "file=@/tmp/example.pdf" http://localhost:8080/v1/files | jq
@@ -415,10 +419,30 @@ for the stub).
 
 **Step 3: Try a real document**
 
-Drop in a small actual PDF:
+Use any PDF file you have available, or create a simple test file:
 
 ```bash
-curl -F "file=@./real-document.pdf" http://localhost:8080/v1/files | jq -r .file_id > /tmp/file_id
+echo "Test document for file upload" > test-upload.txt
+```
+
+Upload the file and capture the returned `file_id`:
+
+```bash
+curl -F "file=@test-upload.txt" http://localhost:8080/v1/files | jq -r .file_id > /tmp/file_id
+```
+
+Verify the upload succeeded and the file ID was captured:
+
+```bash
+cat /tmp/file_id
+```
+
+If this is empty, the upload failed -- check the curl output above for
+errors.
+
+Now ask the agent a question referencing the uploaded file:
+
+```bash
 curl http://localhost:8080/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d "{
@@ -427,7 +451,7 @@ curl http://localhost:8080/v1/chat/completions \
   }" | jq -r '.choices[0].message.content'
 ```
 
-The agent answers using the document's content. No tool call was needed —
+The agent answers using the document's content. No tool call was needed --
 the agent server injected the extracted text before the LLM saw the prompt.
 
 **Step 4: Verify the security controls**
@@ -437,19 +461,30 @@ Try uploading something disallowed:
 ```bash
 echo MZbinary > /tmp/evil.exe
 curl -i -F "file=@/tmp/evil.exe;type=application/x-msdownload" http://localhost:8080/v1/files
-# HTTP/1.1 415 Unsupported Media Type
-# {"detail": "MIME type 'application/x-msdownload' is not in the allowlist"}
 ```
+
+You should see `415 Unsupported Media Type` with a detail message
+indicating the MIME type is not in the allowlist.
 
 Try uploading something oversized:
 
 ```bash
 dd if=/dev/zero of=/tmp/huge.pdf bs=1M count=100 2>/dev/null
 curl -i -F "file=@/tmp/huge.pdf;type=application/pdf" http://localhost:8080/v1/files
-# HTTP/1.1 413 Request Entity Too Large
 ```
 
+You should see `413 Request Entity Too Large`.
+
 **Step 5: Deploy with the gateway and UI**
+
+!!! tip "Multi-cluster safety"
+    The remaining commands use `$CTX` for `--kube-context` and
+    `--context` flags. Set it to the name of your kubeconfig context
+    so you do not accidentally target the wrong cluster:
+
+    ```bash
+    export CTX=your-context-name
+    ```
 
 Once the agent is happy locally, redeploy:
 
@@ -466,33 +501,55 @@ helm upgrade calculus-ui calculus-ui \
   --set files.maxBytes=25m
 ```
 
-!!! note "Reusing the deployed chart"
-    The gateway and UI were scaffolded in `/tmp` during
+!!! note "Finding the scaffolded charts"
+    The gateway and UI charts were scaffolded during
     [Module 5](05-gateway-and-ui.md) and deployed via `helm install`.
-    Here we use `--reuse-values` to keep the existing chart and only
-    override the file-upload settings. If Helm cannot find the release,
-    `cd` to the directory where you originally scaffolded
-    `calculus-gateway` and `calculus-ui` and pass the local chart path
-    instead (e.g., `helm upgrade calculus-gateway ./chart ...`).
+    The `helm upgrade` commands above use `--reuse-values` so Helm
+    keeps the existing chart and only overrides the file-upload
+    settings. If Helm cannot find the release, `cd` to the directory
+    where you originally ran `fips-agents create` for the gateway and
+    UI. If you are unsure where that was, look for the
+    `calculus-gateway/` and `calculus-ui/` directories -- for example
+    `find /tmp -maxdepth 2 -name calculus-gateway -type d 2>/dev/null`.
+    Then pass the local chart path:
+    `helm upgrade calculus-gateway ./chart --kube-context="$CTX" -n calculus-agent ...`
 
 Open the UI, drag a PDF onto the chat input, watch the progress chip,
 then ask a question.
 
 ## Verifying everything is wired up
 
+Check that file uploads are enabled on the agent:
+
 ```bash
-# Agent: file uploads enabled?
 curl http://my-agent:8080/v1/agent-info | jq '.server.files.enabled'
+```
 
-# Gateway: configured caps?
+Check the gateway's configured caps:
+
+```bash
 oc logs deployment/calculus-gateway --context="$CTX" -n calculus-agent | grep files_max_bytes
+```
 
-# UI: config exposed?
+Verify the UI exposes the config:
+
+```bash
 curl http://my-ui:3000/api/config | jq
+```
 
-# Round-trip: upload through the gateway and confirm the chip path
+Round-trip test -- upload through the gateway and confirm the full path
+works. First, look up the gateway route:
+
+```bash
+GATEWAY_ROUTE=$(oc get route calculus-gateway --context="$CTX" -n calculus-gateway -o jsonpath='{.spec.host}')
+echo "$GATEWAY_ROUTE"
+```
+
+Then upload a test file through it:
+
+```bash
 echo test > /tmp/x.txt
-curl -F "file=@/tmp/x.txt" https://calculus-gateway.apps.cluster/v1/files | jq
+curl -F "file=@/tmp/x.txt" "https://${GATEWAY_ROUTE}/v1/files" | jq
 ```
 
 If any layer rejects, the error surfaces with a JSON message — read the

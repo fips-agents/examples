@@ -74,6 +74,17 @@ platform:
     - ${OGX_SHIELD:-code-scanner}
 ```
 
+!!! tip "Verify your MCP server URL"
+    The URL above assumes your MCP server is in the `calculus-mcp`
+    namespace. Verify the service exists:
+
+    ```bash
+    oc get svc -n calculus-mcp --context="$CTX"
+    ```
+
+    If your MCP server is in a different namespace, adjust the URL
+    accordingly.
+
 The existing `model.endpoint` is still set to vLLM — keep it. The framework uses `platform.endpoint` for Responses calls and ignores `model.endpoint` when platform mode is on.
 
 !!! warning "`MODEL_NAME` also has to change"
@@ -113,6 +124,22 @@ async def step(self) -> StepResult:
     export CTX=$(oc config current-context)
     ```
 
+Before deploying, verify the model name your endpoint expects:
+
+```bash
+curl -sk "$OGX_ENDPOINT/models" | jq '.data[].id'
+```
+
+Use the model ID returned by this command as your `MODEL_NAME`.
+
+Make sure you're in the `calculus-agent/` directory:
+
+```bash
+pwd
+```
+
+Start the build and redeploy with the OGX-prefixed model name (see warning above):
+
 ```bash
 oc start-build calculus-agent --from-dir=. --follow -n calculus-agent --context="$CTX"
 
@@ -120,7 +147,7 @@ oc set env deployment/calculus-agent -n calculus-agent --context="$CTX" \
   PLATFORM_MODE=true \
   OGX_ENDPOINT="$OGX_ENDPOINT" \
   OGX_SHIELD="$OGX_SHIELD" \
-  MODEL_NAME="vllm/RedHatAI/gpt-oss-20b"   # the OGX-prefixed form, see warning above
+  MODEL_NAME="vllm/RedHatAI/gpt-oss-20b"
 
 oc rollout restart deployment/calculus-agent -n calculus-agent --context="$CTX"
 oc rollout status deployment/calculus-agent -n calculus-agent --context="$CTX" --timeout=180s
@@ -135,13 +162,20 @@ Watch the logs for the platform-mode startup notice:
 oc logs -n calculus-agent deploy/calculus-agent --context="$CTX" | grep platform.enabled
 ```
 
-You should see something like `platform.enabled=true — OGX will orchestrate 1 platform.mcp entries server-side`. The framework has skipped its own MCP client connections.
+You should see a line containing `platform.enabled=True`. If the grep returns no output, platform mode is not active -- check that `agent.yaml` has the correct OGX configuration and redeploy.
+
+The full line looks something like `platform.enabled=true — OGX will orchestrate 1 platform.mcp entries server-side`. The framework has skipped its own MCP client connections.
 
 ### Verify it works end to end
 
 ```bash
 AGENT_URL=$(oc get route calculus-agent -n calculus-agent --context="$CTX" -o jsonpath='https://{.spec.host}')
+echo "$AGENT_URL"
+```
 
+If this is empty, the route hasn't been created -- check `oc get routes -n calculus-agent --context="$CTX"`.
+
+```bash
 curl -s "$AGENT_URL/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
@@ -216,8 +250,9 @@ platform:
 
 The `connectors:` block syntax in OGX `config.yaml` varies by distribution version. The agent-side pattern is stable; if your platform team has registered MCP connectors centrally, ask them for the connector ID and use the reference form. Read what's currently registered with:
 
+`OGX_ENDPOINT` ends with `/v1`; strip the version segment to reach the v1beta surface:
+
 ```bash
-# OGX_ENDPOINT ends with /v1; strip the version segment to reach the v1beta surface.
 OGX_BASE="${OGX_ENDPOINT%/v1}"
 curl -s "$OGX_BASE/v1beta/connectors" | jq
 ```
