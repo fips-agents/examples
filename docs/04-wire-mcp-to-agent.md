@@ -6,6 +6,12 @@ to the agent you built in Modules 1 and 2. The key insight of this module:
 or care how integration is computed -- it just calls a tool and gets a result.
 You'll make three small changes (config, prompt, code) and redeploy.
 
+Make sure you're back in the agent project directory:
+
+```bash
+cd ../calculus-agent
+```
+
 ## What changes and what doesn't
 
 Before diving in, here's the full picture of what you're about to do:
