@@ -101,7 +101,10 @@ A successful upload returns the JSON metadata record:
 
 Hold on to that `file_id`. Pass it back to `/v1/chat/completions` via the
 `file_ids` array, and the agent server injects the file's extracted text into
-the conversation before the LLM sees the user's message:
+the conversation before the LLM sees the user's message.
+
+Here's what a request with file references looks like (you'll run this for
+real in the lab exercise below):
 
 ```bash
 curl http://my-agent:8080/v1/chat/completions \
@@ -483,36 +486,37 @@ You should see `413 Request Entity Too Large`.
     so you do not accidentally target the wrong cluster:
 
     ```bash
-    export CTX=your-context-name
+    export CTX=$(oc config current-context)
     ```
 
-Once the agent is happy locally, redeploy:
+Once the agent is happy locally, redeploy. Make sure you're in the
+`calculus-agent/` directory:
 
 ```bash
-make deploy PROJECT=calculus-agent
-helm upgrade calculus-gateway calculus-gateway \
-  --kube-context="$CTX" -n calculus-agent \
+oc start-build calculus-agent --from-dir=. --follow -n calculus-agent --context="$CTX"
+oc rollout restart deployment/calculus-agent -n calculus-agent --context="$CTX"
+```
+
+Update the gateway and UI to enable file upload support. Navigate to
+the directory where you scaffolded these projects in Module 5:
+
+```bash
+helm upgrade calculus-gateway ../calculus-gateway/chart/ \
+  --kube-context="$CTX" -n calculus-gateway \
   --reuse-values \
   --set files.maxBytes=25m \
   --set files.allowedMime="application/pdf,image/*"
-helm upgrade calculus-ui calculus-ui \
-  --kube-context="$CTX" -n calculus-agent \
+
+helm upgrade calculus-ui ../calculus-ui/chart/ \
+  --kube-context="$CTX" -n calculus-ui \
   --reuse-values \
   --set files.maxBytes=25m
 ```
 
-!!! note "Finding the scaffolded charts"
-    The gateway and UI charts were scaffolded during
-    [Module 5](05-gateway-and-ui.md) and deployed via `helm install`.
-    The `helm upgrade` commands above use `--reuse-values` so Helm
-    keeps the existing chart and only overrides the file-upload
-    settings. If Helm cannot find the release, `cd` to the directory
-    where you originally ran `fips-agents create` for the gateway and
-    UI. If you are unsure where that was, look for the
-    `calculus-gateway/` and `calculus-ui/` directories -- for example
-    `find /tmp -maxdepth 2 -name calculus-gateway -type d 2>/dev/null`.
-    Then pass the local chart path:
-    `helm upgrade calculus-gateway ./chart --kube-context="$CTX" -n calculus-agent ...`
+!!! note "Chart paths"
+    The `../calculus-gateway/chart/` and `../calculus-ui/chart/` paths
+    assume you're running from `calculus-agent/` and that all projects
+    are sibling directories. Adjust the paths if your layout differs.
 
 Open the UI, drag a PDF onto the chat input, watch the progress chip,
 then ask a question.
@@ -522,19 +526,21 @@ then ask a question.
 Check that file uploads are enabled on the agent:
 
 ```bash
-curl http://my-agent:8080/v1/agent-info | jq '.server.files.enabled'
+AGENT_ROUTE=$(oc get route calculus-agent --context="$CTX" -n calculus-agent -o jsonpath='{.spec.host}')
+curl -sk "https://$AGENT_ROUTE/v1/agent-info" | jq '.server.files.enabled'
 ```
 
 Check the gateway's configured caps:
 
 ```bash
-oc logs deployment/calculus-gateway --context="$CTX" -n calculus-agent | grep files_max_bytes
+oc logs deployment/calculus-gateway --context="$CTX" -n calculus-gateway | grep files_max_bytes
 ```
 
 Verify the UI exposes the config:
 
 ```bash
-curl http://my-ui:3000/api/config | jq
+UI_ROUTE=$(oc get route calculus-ui --context="$CTX" -n calculus-ui -o jsonpath='{.spec.host}')
+curl -sk "https://$UI_ROUTE/api/config" | jq
 ```
 
 Round-trip test -- upload through the gateway and confirm the full path
